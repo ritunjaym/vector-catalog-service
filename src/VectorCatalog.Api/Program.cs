@@ -175,3 +175,6 @@ finally
 {
     await Log.CloseAndFlushAsync();
 }
+
+// Make Program accessible to WebApplicationFactory for integration tests
+public partial class Program { }
