@@ -1,0 +1,99 @@
+syntax = "proto3";
+
+option csharp_namespace = "VectorCatalog.Api.Protos";
+
+package vectorservice;
+
+// ── Embedding Service ─────────────────────────────────────────────────────────
+
+service EmbeddingService {
+  // Generate a vector embedding from a text string
+  rpc GenerateEmbedding (EmbeddingRequest) returns (EmbeddingResponse);
+
+  // Generate embeddings for a batch of texts (used by Spark job)
+  rpc GenerateEmbeddingBatch (EmbeddingBatchRequest) returns (EmbeddingBatchResponse);
+}
+
+message EmbeddingRequest {
+  string text = 1;
+  string model_name = 2; // optional override; defaults to all-MiniLM-L6-v2
+}
+
+message EmbeddingResponse {
+  repeated float vector = 1;
+  int32 dimension = 2;
+  string model_name = 3;
+  double latency_ms = 4;
+}
+
+message EmbeddingBatchRequest {
+  repeated string texts = 1;
+  string model_name = 2;
+}
+
+message EmbeddingBatchResponse {
+  repeated EmbeddingResponse embeddings = 1;
+  double total_latency_ms = 2;
+}
+
+// ── Index Service ─────────────────────────────────────────────────────────────
+
+service IndexService {
+  // ANN search: find top-K nearest neighbors for a query vector
+  rpc SearchIndex (SearchRequest) returns (SearchResponse);
+
+  // Return index statistics and health
+  rpc GetIndexInfo (IndexInfoRequest) returns (IndexInfoResponse);
+
+  // Trigger a hot reload of the FAISS index from disk (blue-green swap)
+  rpc ReloadIndex (ReloadIndexRequest) returns (ReloadIndexResponse);
+}
+
+message SearchRequest {
+  repeated float query_vector = 1;
+  int32 top_k = 2;
+  string shard_key = 3; // e.g., "2023-01", "yellow_taxi" — routes to correct shard
+  int32 nprobe = 4;     // FAISS nprobe parameter; 0 = use default (10)
+}
+
+message SearchResult {
+  int64 id = 1;
+  float score = 2;      // L2 distance (lower = more similar)
+  string metadata_json = 3; // serialized metadata fields as JSON string
+}
+
+message SearchResponse {
+  repeated SearchResult results = 1;
+  string shard_key = 2;
+  double search_latency_ms = 3;
+  bool cache_hit = 4;
+}
+
+message IndexInfoRequest {
+  string shard_key = 1; // empty = return all shards
+}
+
+message IndexInfoResponse {
+  repeated ShardInfo shards = 1;
+}
+
+message ShardInfo {
+  string shard_key = 1;
+  int64 total_vectors = 2;
+  int32 dimension = 3;
+  string index_type = 4;  // e.g., "IVF100,PQ8"
+  bool is_trained = 5;
+  string index_path = 6;
+  int64 index_size_bytes = 7;
+}
+
+message ReloadIndexRequest {
+  string shard_key = 1;  // empty = reload all shards
+  string index_path = 2; // optional override path
+}
+
+message ReloadIndexResponse {
+  bool success = 1;
+  string message = 2;
+  repeated string reloaded_shards = 3;
+}
