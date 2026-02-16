@@ -58,6 +58,7 @@ try
     builder.Services.AddScoped<ResilientIndexService>();
     builder.Services.AddSingleton<ICacheService, RedisCacheService>();
     builder.Services.AddSingleton<VectorCatalogMetrics>();
+    builder.Services.AddSingleton<ShardRouter>();
     builder.Services.AddSingleton<ServiceInfo>(_ => new ServiceInfo
     {
         Name = "vector-catalog-api",
