@@ -46,8 +46,10 @@ public static class ResiliencePolicies
     {
         return Policy<T>
             .Handle<RpcException>(ex => TransientStatusCodes.Contains(ex.StatusCode))
-            .CircuitBreakerAsync(
-                exceptionsAllowedBeforeBreaking: 5,
+            .AdvancedCircuitBreakerAsync(
+                failureThreshold: 0.5,              // Open when 50% of requests fail
+                samplingDuration: TimeSpan.FromSeconds(10),
+                minimumThroughput: 5,                // At least 5 requests in sampling window
                 durationOfBreak: TimeSpan.FromSeconds(30),
                 onBreak: (ex, duration) =>
                     logger.LogError("Circuit breaker OPEN for {Operation}: {Duration}s break. Reason: {Error}",

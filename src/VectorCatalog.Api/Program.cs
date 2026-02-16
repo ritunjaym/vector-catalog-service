@@ -9,6 +9,7 @@ using Serilog;
 using VectorCatalog.Api.Configuration;
 using VectorCatalog.Api.Infrastructure.Grpc;
 using VectorCatalog.Api.Infrastructure.Health;
+using VectorCatalog.Api.Infrastructure.Resilience;
 using VectorCatalog.Api.Models;
 using VectorCatalog.Api.Services;
 
@@ -46,13 +47,18 @@ try
     builder.Services.AddSidecarGrpcClients();
 
     // ── Application Services ──────────────────────────────────────────────────
-    builder.Services.AddScoped<IEmbeddingService, EmbeddingService>();
+    builder.Services.AddScoped<EmbeddingService>();          // concrete impl
+    builder.Services.AddScoped<IEmbeddingService>(sp =>      // resilience decorator
+        new ResilientEmbeddingService(
+            sp.GetRequiredService<EmbeddingService>(),
+            sp.GetRequiredService<ILogger<ResilientEmbeddingService>>()));
     builder.Services.AddScoped<ISearchService, SearchService>();
+    builder.Services.AddScoped<ResilientIndexService>();
     builder.Services.AddSingleton<ICacheService, RedisCacheService>();
     builder.Services.AddSingleton<ServiceInfo>(_ => new ServiceInfo
     {
         Name = "vector-catalog-api",
-        Version = "0.1.0",
+        Version = "0.2.0",
         Environment = builder.Environment.EnvironmentName,
         StartedAt = DateTime.UtcNow
     });
