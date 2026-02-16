@@ -9,6 +9,7 @@ using Serilog;
 using VectorCatalog.Api.Configuration;
 using VectorCatalog.Api.Infrastructure.Grpc;
 using VectorCatalog.Api.Infrastructure.Health;
+using VectorCatalog.Api.Infrastructure.Observability;
 using VectorCatalog.Api.Infrastructure.Resilience;
 using VectorCatalog.Api.Models;
 using VectorCatalog.Api.Services;
@@ -55,6 +56,7 @@ try
     builder.Services.AddScoped<ISearchService, SearchService>();
     builder.Services.AddScoped<ResilientIndexService>();
     builder.Services.AddSingleton<ICacheService, RedisCacheService>();
+    builder.Services.AddSingleton<VectorCatalogMetrics>();
     builder.Services.AddSingleton<ServiceInfo>(_ => new ServiceInfo
     {
         Name = "vector-catalog-api",
@@ -92,6 +94,7 @@ try
         .WithMetrics(metrics => metrics
             .AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation()
+            .AddMeter(VectorCatalogMetrics.MeterName)
             .AddPrometheusExporter());
 
     // ── Rate Limiting ─────────────────────────────────────────────────────────
