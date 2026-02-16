@@ -1,0 +1,40 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'vector-catalog-dev'
+    environment: 'local'
+
+scrape_configs:
+  # ══════════════════════════════════════════════════════════════════════════
+  # Vector Catalog API (.NET metrics)
+  # ══════════════════════════════════════════════════════════════════════════
+  - job_name: 'vector-catalog-api'
+    static_configs:
+      - targets: ['api:8081']
+        labels:
+          service: 'vector-catalog-api'
+          version: 'v0.1.0'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    metrics_path: '/metrics'
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # Prometheus self-monitoring
+  # ══════════════════════════════════════════════════════════════════════════
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # Redis metrics (via redis_exporter if added later)
+  # ══════════════════════════════════════════════════════════════════════════
+  # - job_name: 'redis'
+  #   static_configs:
+  #     - targets: ['redis-exporter:9121']
+
+# Alerting rules (can be extended)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']
