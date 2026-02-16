@@ -1,0 +1,16 @@
+apiVersion: v2
+name: vector-catalog
+description: ANN search service over 100M+ vectors with FAISS IVF-PQ indexing and Delta Lake ingestion
+type: application
+version: 1.0.0
+appVersion: "0.2.0"
+keywords:
+  - vector-search
+  - faiss
+  - ann
+  - embeddings
+  - delta-lake
+maintainers:
+  - name: Ritunjay
+sources:
+  - https://github.com/ritunjay/vector-catalog-service
