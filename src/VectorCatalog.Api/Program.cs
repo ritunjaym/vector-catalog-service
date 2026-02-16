@@ -9,6 +9,7 @@ using Serilog;
 using VectorCatalog.Api.Configuration;
 using VectorCatalog.Api.Infrastructure.Grpc;
 using VectorCatalog.Api.Infrastructure.Health;
+using VectorCatalog.Api.Infrastructure.Middleware;
 using VectorCatalog.Api.Infrastructure.Observability;
 using VectorCatalog.Api.Infrastructure.Resilience;
 using VectorCatalog.Api.Models;
@@ -143,6 +144,7 @@ try
         app.UseSwaggerUI();
     }
 
+    app.UseCorrelationId();
     app.UseRouting();
     app.UseRateLimiter();
     app.UseAuthorization();
