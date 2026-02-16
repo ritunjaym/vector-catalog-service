@@ -41,57 +41,80 @@ Vector Catalog Service is a **production-grade semantic search engine** designed
 
 ## 🏗️ Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  Client (REST API Requests)                                             │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│  Vector Catalog API (.NET 8)                                            │
-│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────────┐       │
-│  │ Controllers  │  │  Services    │  │  Grpc Client Factory   │       │
-│  │ • Search     │→ │ • Search     │→ │  • Embedding Client    │       │
-│  │ • Health     │  │ • Cache      │  │  • Index Client        │       │
-│  │ • Index      │  │ • Embedding  │  │  • Connection Pooling  │       │
-│  └──────────────┘  └──────────────┘  └────────────────────────┘       │
-│          │                  ▲                         │                 │
-│          │                  │ Redis Cache Hit         │ gRPC over HTTP/2│
-│          │                  │                         │                 │
-│          ▼                  │                         ▼                 │
-│  ┌─────────────────────────────────────────────────────────────┐       │
-│  │  OpenTelemetry Instrumentation                              │       │
-│  │  • ASP.NET Core  • gRPC  • HTTP  • Redis                    │       │
-│  └─────────────────────────────────────────────────────────────┘       │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                   ┌────────────────┼────────────────┐
-                   │                │                │
-                   ▼                ▼                ▼
-         ┌─────────────┐  ┌─────────────────┐  ┌────────────┐
-         │   Redis 7   │  │ Python Sidecar  │  │  Jaeger    │
-         │   (Cache)   │  │  ┌───────────┐  │  │ (Tracing)  │
-         └─────────────┘  │  │ Embedding │  │  └────────────┘
-                          │  │  Service  │  │
-                          │  └───────────┘  │
-                          │  ┌───────────┐  │
-                          │  │   Index   │  │
-                          │  │  Service  │  │
-                          │  │ (FAISS)   │  │
-                          │  └───────────┘  │
-                          └─────────────────┘
-                                    │
-                                    ▼
-                          ┌─────────────────┐
-                          │  MinIO (S3 API) │
-                          │  ┌───────────┐  │
-                          │  │Delta Lake │  │
-                          │  └───────────┘  │
-                          │  ┌───────────┐  │
-                          │  │   FAISS   │  │
-                          │  │  Indexes  │  │
-                          │  └───────────┘  │
-                          └─────────────────┘
+### Production Deployment (AKS)
+
+```mermaid
+graph TB
+    subgraph "External Traffic"
+        Client[Client<br/>REST API Requests]
+    end
+
+    subgraph "Azure Kubernetes Service"
+        subgraph "LoadBalancer Services"
+            LB_API[LoadBalancer<br/>External IP:80]
+            LB_Jaeger[LoadBalancer<br/>Jaeger UI:16686]
+        end
+
+        subgraph "API Layer (2-10 replicas, HPA enabled)"
+            API1[API Pod 1<br/>.NET 8 + ASP.NET Core<br/>500m-2000m CPU, 1-2Gi RAM]
+            API2[API Pod 2]
+            API3[API Pod N<br/>Rate Limiter<br/>Redis Cache]
+        end
+
+        subgraph "Sidecar Layer (3-10 replicas)"
+            Sidecar1[Sidecar Pod 1<br/>Python gRPC Server<br/>FAISS IVF-PQ Index<br/>1-4 CPU, 4-8Gi RAM]
+            Sidecar2[Sidecar Pod 2]
+            Sidecar3[Sidecar Pod N<br/>Embedding Service<br/>all-MiniLM-L6-v2]
+        end
+
+        subgraph "Storage & Observability"
+            Redis[(Redis Cache<br/>ClusterIP<br/>Query Results)]
+            PVC[(PersistentVolumeClaim<br/>50Gi Managed Disk<br/>FAISS Index Storage)]
+            Jaeger[Jaeger All-in-One<br/>OpenTelemetry Traces]
+            Prometheus[Prometheus<br/>Metrics Scraper]
+        end
+    end
+
+    Client -->|HTTP/REST| LB_API
+    LB_API -->|Round-robin| API1
+    LB_API --> API2
+    LB_API --> API3
+
+    API1 -->|gRPC/HTTP2| Sidecar1
+    API2 -->|gRPC/HTTP2| Sidecar2
+    API3 -->|gRPC/HTTP2| Sidecar3
+
+    API1 -.->|Cache Check| Redis
+    API2 -.->|Cache Hit 85%| Redis
+    API3 -.->|Cache Set| Redis
+
+    Sidecar1 -->|Read-only Mount| PVC
+    Sidecar2 -->|Shared Access| PVC
+    Sidecar3 -->|FAISS Search| PVC
+
+    API1 -.->|Traces| Jaeger
+    API2 -.->|Spans| Jaeger
+    Sidecar1 -.->|Activity Context| Jaeger
+
+    API1 -.->|/metrics| Prometheus
+    API2 -.->|Scrape :8080| Prometheus
+
+    Client -.->|Monitor| LB_Jaeger
+    LB_Jaeger --> Jaeger
+
+    style Client fill:#e1f5ff
+    style LB_API fill:#ffe6cc
+    style LB_Jaeger fill:#ffe6cc
+    style API1 fill:#d5e8d4
+    style API2 fill:#d5e8d4
+    style API3 fill:#d5e8d4
+    style Sidecar1 fill:#dae8fc
+    style Sidecar2 fill:#dae8fc
+    style Sidecar3 fill:#dae8fc
+    style Redis fill:#fff2cc
+    style PVC fill:#fff2cc
+    style Jaeger fill:#f8cecc
+    style Prometheus fill:#f8cecc
 ```
 
 ### Data Flow
