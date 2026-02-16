@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using VectorCatalog.Api.Configuration;
+using VectorCatalog.Api.Infrastructure.Observability;
 using VectorCatalog.Api.Infrastructure.Resilience;
 using VectorCatalog.Api.Models;
 using VectorCatalog.Api.Protos;
@@ -48,6 +49,9 @@ public class SearchService : ISearchService
             return cached;
         }
 
+        // Enrich OpenTelemetry activity with search request details
+        ActivityEnricher.EnrichSearchActivity(Activity.Current, request);
+
         // 2. Generate embedding (with Polly resilience via ResilientEmbeddingService)
         _logger.LogInformation("Cache MISS: hash={Hash} — generating embedding", queryHash);
         var vector = await _embeddingService.GenerateEmbeddingAsync(request.Query, cancellationToken);
@@ -87,6 +91,9 @@ public class SearchService : ISearchService
 
         // 5. Populate cache (fire-and-forget — don't delay the response)
         _ = Task.Run(() => _cacheService.SetAsync(queryHash, response, cancellationToken: CancellationToken.None));
+
+        // Enrich OpenTelemetry activity with search response details
+        ActivityEnricher.EnrichSearchActivity(Activity.Current, request, response);
 
         _logger.LogInformation(
             "Search complete: hash={Hash}, results={Count}, embeddingMs+searchMs+totalMs={Total:F1}",

@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Options;
 using VectorCatalog.Api.Configuration;
+using VectorCatalog.Api.Infrastructure.Observability;
 using VectorCatalog.Api.Protos;
 
 namespace VectorCatalog.Api.Services;
@@ -21,6 +23,9 @@ public class EmbeddingService : IEmbeddingService
     {
         _logger.LogDebug("Generating embedding for text (length={Length})", text.Length);
 
+        // Enrich OpenTelemetry activity with embedding request details
+        ActivityEnricher.EnrichEmbeddingActivity(Activity.Current, text);
+
         var request = new EmbeddingRequest
         {
             Text = text,
@@ -32,6 +37,11 @@ public class EmbeddingService : IEmbeddingService
         _logger.LogDebug("Embedding generated: dim={Dimension}, latency={Latency}ms",
             response.Dimension, response.LatencyMs);
 
-        return [.. response.Vector];
+        var vector = response.Vector.ToArray();
+
+        // Enrich OpenTelemetry activity with embedding response details
+        ActivityEnricher.EnrichEmbeddingActivity(Activity.Current, text, vector);
+
+        return vector;
     }
 }
