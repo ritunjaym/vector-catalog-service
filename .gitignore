@@ -1,0 +1,55 @@
+# .gitignore
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.nupkg
+*.snupkg
+TestResults/
+coverage/
+.nuget/
+publish/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+*.so
+htmlcov/
+.coverage
+
+# Docker
+.docker/
+
+# Data & indices
+data/
+*.parquet
+*.index
+*.faiss
+embeddings/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Secrets
+*.env
+.env
+secrets/
