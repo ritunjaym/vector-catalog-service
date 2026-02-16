@@ -3,30 +3,23 @@
 # Optimized for layer caching and small final image size
 # ══════════════════════════════════════════════════════════════════════════════
 
-# ── Stage 1: Restore dependencies (cached layer) ─────────────────────────────
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS restore
-WORKDIR /src
-
-# Copy only project files for dependency restoration (better caching)
-COPY ["src/VectorCatalog.Api/VectorCatalog.Api.csproj", "src/VectorCatalog.Api/"]
-RUN dotnet restore "src/VectorCatalog.Api/VectorCatalog.Api.csproj"
-
-# ── Stage 2: Build application ────────────────────────────────────────────────
-FROM restore AS build
+# ── Stage 1: Build application ────────────────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
 # Copy all source code
 COPY . .
 
-# Build in Release configuration
+# Restore and build in Release configuration
 WORKDIR "/src/src/VectorCatalog.Api"
-RUN dotnet build "VectorCatalog.Api.csproj" -c Release -o /app/build --no-restore
+RUN dotnet restore "VectorCatalog.Api.csproj"
+RUN dotnet build "VectorCatalog.Api.csproj" -c Release -o /app/build
 
-# ── Stage 3: Publish application ──────────────────────────────────────────────
+# ── Stage 2: Publish application ──────────────────────────────────────────────
 FROM build AS publish
-RUN dotnet publish "VectorCatalog.Api.csproj" -c Release -o /app/publish --no-restore --no-build
+RUN dotnet publish "VectorCatalog.Api.csproj" -c Release -o /app/publish
 
-# ── Stage 4: Final runtime image ──────────────────────────────────────────────
+# ── Stage 3: Final runtime image ──────────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 
 # Install curl for health checks
