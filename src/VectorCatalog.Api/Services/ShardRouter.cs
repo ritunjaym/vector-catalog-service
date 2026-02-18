@@ -7,7 +7,7 @@ namespace VectorCatalog.Api.Services;
 ///   - Shard key = logical partition (e.g., "nyc_taxi_2023", "nyc_taxi_2022")
 ///   - For 100M+ records: partition by year-month ("nyc_taxi_2023-01")
 ///   - Each shard is an independent FAISS IVF-PQ index loaded in the sidecar
-///   - Fan-out search (query multiple shards, merge results) is a Week 3 feature
+///   - Fan-out search (query multiple shards, merge results) is not yet implemented
 ///
 /// Why not hash-based sharding?
 ///   - Content-based sharding (by time/category) enables index pruning:
@@ -38,12 +38,12 @@ public class ShardRouter
     }
 
     /// <summary>
-    /// For multi-shard fan-out (future Week 3): returns all shard keys to query in parallel.
-    /// Currently returns single shard — placeholder for expansion.
+    /// For multi-shard fan-out: returns all shard keys to query in parallel.
+    /// Currently returns a single shard. Fan-out merge is not yet implemented.
     /// </summary>
     public IReadOnlyList<string> ResolveShardKeys(string? requestedShardKey, string defaultShardKey)
     {
         var key = ResolveShardKey(requestedShardKey, defaultShardKey);
-        return [key]; // Expand to multiple shards in Week 3
+        return [key]; // Fan-out across multiple shards is not yet implemented
     }
 }
