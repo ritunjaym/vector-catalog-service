@@ -23,6 +23,24 @@ public class SearchEndpointTests : IAsyncLifetime
     private WebApplicationFactory<Program>? _factory;
     private HttpClient? _client;
 
+    static SearchEndpointTests()
+    {
+        // When dotnet test runs inside a Docker container (Docker-in-Docker), two
+        // problems arise:
+        //   1. Ryuk (the Testcontainers resource reaper) cannot reach its own
+        //      container port → 60s timeout → ResourceReaperException.
+        //   2. On Docker Desktop (macOS/Windows), Redis is mapped to a host port
+        //      that is not reachable via "localhost" from within the SDK container;
+        //      "host.docker.internal" is the correct gateway.
+        // CI runners execute dotnet test natively (no /.dockerenv) so these
+        // overrides are never applied there.
+        if (File.Exists("/.dockerenv"))
+        {
+            Environment.SetEnvironmentVariable("TESTCONTAINERS_RYUK_DISABLED", "true");
+            Environment.SetEnvironmentVariable("TESTCONTAINERS_HOST_OVERRIDE", "host.docker.internal");
+        }
+    }
+
     public SearchEndpointTests()
     {
         _redis = new RedisBuilder()
@@ -37,8 +55,8 @@ public class SearchEndpointTests : IAsyncLifetime
         _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
-                builder.UseSetting("VectorCatalogOptions:Redis:ConnectionString", _redis.GetConnectionString());
-                builder.UseSetting("VectorCatalogOptions:Sidecar:GrpcAddress", "http://localhost:50051");
+                builder.UseSetting("VectorCatalog:Redis:ConnectionString", _redis.GetConnectionString());
+                builder.UseSetting("VectorCatalog:SidecarGrpcAddress", "http://localhost:50051");
 
                 builder.ConfigureServices(services =>
                 {
