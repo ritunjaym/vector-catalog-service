@@ -1,234 +1,239 @@
 # Performance Benchmarks
 
-Vector Catalog Service performance metrics from k6 load testing on local Docker Compose environment and projected AKS production deployment.
+---
 
-> **Reproducibility Note**
+## Measured Results — Local Docker Compose (2026-02-18)
+
+> **What was tested**: k6 v1.6.1 against a live Docker Compose stack with all 6 services
+> healthy. No FAISS index was loaded (data ingestion requires a pre-built `.index` file
+> via `scripts/build_faiss_index.py`). Two endpoints were tested:
 >
-> The latency and throughput numbers below were measured against a **synthetic
-> development FAISS index** (IVF100, PQ8, ~100K vectors on the NYC Taxi 2023-01
-> dataset). The "100M vectors" figure referenced in architecture documentation
-> describes the target production scale, not the local test dataset.
+> 1. `GET /health/live` — pure ASP.NET Core framework throughput (no backend dependency)
+> 2. `POST /api/v1/search` — full API pipeline including Polly resilience layer and gRPC
+>    call to the sidecar (sidecar responds with `INTERNAL` because no index is loaded)
 >
-> **100M+ scale projections** in the AKS section are linear extrapolations based
-> on FAISS's documented O(nlist) sub-linear search complexity and the measured
-> single-shard latency. Full-scale validation (IVF4096, PQ32, 100M+ vectors)
-> requires dedicated infrastructure (Azure Standard_D16s_v5 or equivalent) and
-> is pending.
+> The search results below **reflect API-layer performance only** — not FAISS search
+> latency. They demonstrate the Polly circuit-breaker behaviour and provide a lower bound
+> on total request latency in production (production adds embedding + FAISS time on top).
 >
-> **To reproduce locally:** `docker compose up -d && k6 run scripts/load_test.js`
-> (requires a pre-built FAISS index in `data/indexes/`; see `scripts/build_faiss_index.py`).
+> **To reproduce:** `docker compose up -d && k6 run tests/load/search_load.js`
 
-## Test Environment
+### Test Environment
 
-### Local Docker Compose (Baseline)
-- **Machine**: MacBook Pro M1 Max (10-core CPU, 32GB RAM)
-- **Docker**: Docker Desktop 4.28, 8 CPU cores, 16GB RAM allocated
-- **Stack**:
-  - API: 1 instance (2 CPU, 2GB RAM)
-  - Sidecar: 1 instance (4 CPU, 8GB RAM)
-  - Redis: 1 instance (1 CPU, 2GB RAM)
-  - FAISS Index: 100M vectors (nyc_taxi_2023), IVF-PQ (IVF4096, PQ32)
-- **Load Test Tool**: k6 v0.49
-- **Test Duration**: 150s total (30s ramp-up, 60s sustained, 30s peak, 30s ramp-down)
-- **Query Set**: 10 realistic NYC Taxi queries, cycled randomly
+| Parameter | Value |
+|-----------|-------|
+| Machine | Apple M2, 8 GB RAM |
+| OS | macOS (Darwin 25.3.0) |
+| Docker Desktop | Server 29.2.0, 8 CPUs, 3.83 GiB RAM allocated |
+| k6 version | v1.6.1 |
+| Stack | API + Sidecar + Redis + MinIO + Prometheus + Jaeger |
+| FAISS index loaded | No (sidecar healthy, no `.index` files) |
 
-### Production AKS (Projected)
-- **Cluster**: Azure Kubernetes Service (AKS) Standard_D4s_v5 nodes
-- **API**: 2-10 pods (HPA), 500m-2000m CPU, 1-2Gi RAM per pod
-- **Sidecar**: 3-10 pods, 1-4 CPU, 4-8Gi RAM per pod
-- **Redis**: 1 pod, 1 CPU, 2Gi RAM
-- **Storage**: 50Gi Azure Managed Disk (Premium SSD) for FAISS index
+---
 
-## Week 2: Baseline Results (Warm Cache)
+### Baseline: GET /health/live (200 VUs, 50s)
 
-### Latency (P50/P95/P99)
-| Metric | Target | Achieved | Status |
-|--------|--------|----------|--------|
-| P50 Latency | < 200ms | **152ms** | ✅ Pass |
-| P95 Latency | < 400ms | **380ms** | ✅ Pass |
-| P99 Latency | < 500ms | **425ms** | ✅ Pass |
-| Max Latency | N/A | 890ms | - |
+```
+  ✓ http_req_duration  p(95)=31.32ms   [threshold: <50ms]  PASS
+  ✓ http_req_failed    rate=0.00%       [threshold: <0.1%]  PASS
 
-### Throughput & Load
+  http_req_duration: avg=9.15ms  med=7.01ms  p(90)=13.33ms  p(95)=31.32ms  p(99)=57.41ms
+  http_reqs........: 869,817  @ 17,396 req/s
+  vus_max..........: 200
+```
+
+| Metric | Value |
+|--------|-------|
+| P50 | 7ms |
+| P90 | 13ms |
+| P95 | 31ms |
+| P99 | 57ms |
+| Throughput | **17,396 req/s** at 200 VUs |
+| Error rate | 0.00% |
+| Total requests | 869,817 in 50s |
+
+The health endpoint measures raw ASP.NET Core + Kestrel overhead. At 17K+ req/s with
+P99=57ms under 200 concurrent users, the framework layer introduces minimal overhead.
+This is the **upper bound on throughput** — search requests cannot be faster than this.
+
+---
+
+### Search API: POST /api/v1/search (10→50→100 VUs, 3m)
+
+No FAISS index was loaded, so every request hits the Polly resilience layer before
+returning HTTP 500 with an RFC 7807 ProblemDetails body. This exercises the real code
+path through: routing → rate limiter → validation → cache lookup → gRPC → Polly.
+
+```
+  ✗ http_req_duration  p(95)=5s         [threshold: <500ms] FAIL (expected — no index)
+  ✗ http_req_failed    rate=100%        [threshold: <1%]    FAIL (expected — no index)
+
+  http_req_duration: avg=3.41s  med=4.3s  p(90)=5s  p(95)=5s  (k6 5s client timeout)
+  http_reqs........: 2,306  @ 12.8 req/s
+  vus_max..........: 100
+```
+
+**Server-side ASP.NET histogram** (`/metrics`, for the 1,270 requests that returned
+before k6's 5s client timeout):
+
 | Metric | Value | Notes |
 |--------|-------|-------|
-| Peak VUs | 100 | Virtual users at peak |
-| Sustained VUs | 50 | For 60s sustained load |
-| Total Requests | 7,823 | Over 150s test |
-| Avg Throughput | 52 req/s | With cache warming |
-| Peak Throughput | 98 req/s | At 100 VUs |
-| Failed Requests | 0.08% (6/7823) | Rate limiting 429s |
+| Total completed (HTTP 500) | 1,270 | Received RFC 7807 ProblemDetails |
+| Client-timed-out (no response) | 1,036 | k6 5s timeout exceeded |
+| Avg server-side duration | **2,100ms** | `sum=2668s / count=1270` |
+| Fast-fail responses (≤250ms) | 58 (4.6%) | Circuit breaker already open → BrokenCircuitException |
+| Slow retries (250ms–2.5s) | 722 (56.8%) | Polly retry: 3× with 200/400/800ms backoff |
+| Near-timeout (2.5s–5s) | 486 (38.3%) | Circuit closed again after 30s break, retrying |
+
+**Why requests take 1–5s (Polly in action):**
+
+The `ResilientIndexService` wraps gRPC calls with `ResiliencePolicies.GetCombinedGrpcPolicy`:
+1. **Retry policy**: 3 retries on `INTERNAL`/`UNAVAILABLE` with exponential backoff
+   (200ms → 400ms → 800ms + jitter). Each individual gRPC attempt fails immediately
+   (sidecar returns `INTERNAL` synchronously), but Polly waits ~1.4s total for 3 retries.
+2. **Circuit breaker**: opens after 50% failure rate over 5+ requests in a 10s window.
+   Once open, calls throw `BrokenCircuitException` immediately (< 1ms). This accounts
+   for the 58 fast-fail responses (≤250ms).
+3. **Timeout policy**: 5s overall cap. Requests that exhaust retries AND catch the circuit
+   re-closing during the 30s break period may hit this limit.
+4. **RFC 7807 response**: `app.UseExceptionHandler()` converts all unhandled exceptions
+   to `application/problem+json` — confirmed working in every 500 response.
+
+**Throughput note**: 12.8 req/s reflects concurrency limited by Polly retry delays
+(each VU blocks for ~1.4s per retry cycle). With a loaded FAISS index (fast success path),
+the same API layer sustained **52 req/s** on a synthetic ~100K-vector index (see section
+below) and is projected at **500–800 req/s** on AKS with horizontal scaling.
+
+---
 
 ### Cache Performance
-| Metric | Target | Achieved | Status |
-|--------|--------|----------|--------|
-| Cache Hit Rate | > 70% | **85.3%** | ✅ Pass |
-| Cache Hits | N/A | 6,674 | - |
-| Cache Misses | N/A | 1,149 | - |
-| Avg Cache Hit Latency | N/A | 48ms | Redis GET + deserialization |
-| Avg Cache Miss Latency | N/A | 380ms | Embedding (120ms) + FAISS (260ms) |
 
-### Resource Utilization (Docker Stats)
-| Service | CPU Avg | CPU Peak | Memory Avg | Memory Peak | Notes |
-|---------|---------|----------|------------|-------------|-------|
-| API | 55% | 145% | 1.2 GiB | 1.8 GiB | .NET GC pressure |
-| Sidecar | 180% | 320% | 4.5 GiB | 6.2 GiB | FAISS index in RAM |
-| Redis | 12% | 25% | 256 MiB | 512 MiB | LRU eviction working well |
-| Jaeger | 8% | 15% | 180 MiB | 220 MiB | In-memory traces only |
+Not measurable in this run — the Redis cache-aside check in `SearchService` is reached,
+but the gRPC call to FAISS fails before any results are written to cache. Redis health
+check: `GET /health/ready` → 200 OK (Redis dependency healthy).
 
-## Cold vs Warm Cache Comparison
+**Cache round-trip validated separately** via integration tests:
+`Search_SecondIdenticalRequest_ReturnsCacheHit` passes consistently (12/12 tests green).
 
-| Scenario | P50 | P95 | P99 | Throughput | Notes |
-|----------|-----|-----|-----|------------|-------|
-| **Cold Cache** (first run) | 420ms | 890ms | 1,200ms | 22 req/s | All queries hit sidecar |
-| **Warm Cache** (after warmup) | 152ms | 380ms | 425ms | 52 req/s | 85% cache hit rate |
-| **Improvement** | **-64%** | **-57%** | **-65%** | **+136%** | Cache warming essential |
+---
 
-## Query Breakdown (Warm Cache)
+### Observability Confirmed
 
-### By Cache Status
-| Cache Status | Count | % | Avg Latency | P95 Latency | P99 Latency |
-|--------------|-------|---|-------------|-------------|-------------|
-| Cache Hit | 6,674 | 85.3% | 48ms | 85ms | 120ms |
-| Cache Miss | 1,149 | 14.7% | 380ms | 520ms | 680ms |
+- `GET /metrics` exposes OpenTelemetry Prometheus format on port 8080 ✅
+- `http_server_request_duration_seconds` histogram populated for all routes ✅
+- `error_type="Grpc.Core.RpcException"` label on 500 responses confirms gRPC error
+  propagation is instrumented ✅
+- Jaeger traces confirm parent-child span relationships (API → gRPC sidecar) ✅
+- Note: `prometheus.yml` scrape target points to port 8081 (incorrect); fix pending.
+  Direct scrape via `curl localhost:8080/metrics` works correctly.
 
-### By Latency Component (Cache Miss)
-| Component | Avg Duration | % of Total | Notes |
-|-----------|--------------|------------|-------|
-| Embedding Generation | 120ms | 31.6% | SentenceTransformer on CPU |
-| FAISS IVF Search | 260ms | 68.4% | IVF4096 + PQ32 on 100M vectors |
-| Redis Cache Write | 8ms | 2.1% | Fire-and-forget async |
-| API Overhead | 12ms | 3.2% | Serialization + middleware |
+---
 
-## AKS Production Projections
+---
 
-### Expected Performance (3 API + 5 Sidecar pods)
-| Metric | Projected Value | Assumptions |
-|--------|-----------------|-------------|
-| P50 Latency | **100-150ms** | Warm cache, load balanced across pods |
-| P99 Latency | **300-400ms** | Even with occasional cache misses |
-| Throughput | **500-800 qps** | 3 API pods × 150 qps + 5 Sidecar pods |
-| Cache Hit Rate | **80-90%** | Redis cluster with 4Gi cache |
-| Max Concurrent Users | **1,000+** | With HPA scaling to 10 API pods |
+## Reference: Synthetic FAISS Index Results (Prior Measurement)
 
-### Scaling Strategy
-| Load (qps) | API Pods | Sidecar Pods | Redis Size | Expected P99 |
-|------------|----------|--------------|------------|--------------|
-| < 100 | 2 | 3 | 2Gi | 200ms |
-| 100-300 | 3-5 | 5 | 4Gi | 300ms |
-| 300-600 | 5-8 | 7 | 8Gi | 350ms |
-| 600-1000 | 8-10 | 10 | 16Gi | 400ms |
+> These numbers were measured against a **synthetic development FAISS index**
+> (IVF100, PQ8, ~100K vectors on NYC Taxi 2023-01). The "100M vectors" figure describes
+> the **target production scale**, not the test dataset. See the Reproducibility Note
+> at the top of the original section for full context.
 
-### Cost Analysis (Azure Pricing - East US)
-| Component | SKU | Monthly Cost | Notes |
-|-----------|-----|--------------|-------|
-| AKS Control Plane | Standard | $73 | Free tier available |
-| Worker Nodes (3× D4s_v5) | 4 vCPU, 16GB | $420 | For API + Sidecar pods |
-| Managed Disk (50Gi Premium SSD) | P10 | $19 | FAISS index storage |
-| Load Balancer (Standard) | Basic | $18 | External IP + health probes |
-| Bandwidth (1TB egress) | Data Transfer | $87 | API responses |
-| **Total** | - | **$617/month** | 500-800 qps capacity |
+### Latency (P50/P95/P99) — Warm Cache
 
-## Optimization Opportunities
+| Metric | Target | Achieved |
+|--------|--------|----------|
+| P50 | < 200ms | **152ms** |
+| P95 | < 400ms | **380ms** |
+| P99 | < 500ms | **425ms** |
+| Max | N/A | 890ms |
 
-### Short-term (Week 3-4)
-1. **Embedding Caching**: Cache embeddings by query hash (reduce redundant model calls)
-   - Expected improvement: -30% P99 latency on cache misses
-2. **Connection Pooling**: Increase gRPC connection pool size from 10 to 50
-   - Expected improvement: +15% throughput under high load
-3. **Rate Limiter Tuning**: Increase from 100 req/s to 200 req/s per pod
-   - Current bottleneck: 6 requests failed with 429 during peak
+### Throughput
 
-### Mid-term (Month 2)
-1. **FAISS Index Optimization**:
-   - Switch from IVF4096 to IVF8192 (fewer clusters, faster search)
-   - Reduce PQ from 32 to 24 (less compression, better recall)
-   - Expected improvement: -20% FAISS search latency (260ms → 210ms)
-2. **Sidecar GPU Acceleration**:
-   - Use NVIDIA T4 GPU for embedding generation (120ms → 15ms)
-   - Requires AKS node pool with GPU (Standard_NC4as_T4_v3)
-   - Cost: +$350/month, -70% embedding latency
-3. **Multi-Shard Fan-out**:
-   - Implement ShardRouter fan-out for parallel shard queries
-   - Query 3 shards in parallel (2023-01, 2023-02, 2023-03)
-   - Expected: +50% throughput, +30% latency (network overhead)
+| Metric | Value |
+|--------|-------|
+| Avg throughput | 52 req/s (warm cache) |
+| Peak throughput | 98 req/s at 100 VUs |
+| Error rate | 0.08% (6 rate-limited 429s) |
+| Total requests | 7,823 over 150s |
 
-### Long-term (Month 3+)
-1. **Distributed FAISS with HNSW**:
-   - Replace IVF-PQ with HNSW graph index (better recall, similar latency)
-   - Shard across multiple nodes for 1B+ vectors
-2. **Real-time Index Updates**:
-   - Add Kafka consumer for live taxi data ingestion
-   - Incremental FAISS index updates (no full rebuild)
-3. **Query Result Prefetching**:
-   - Analyze query patterns, prefetch likely next queries
-   - ML model to predict user search sequences
+### Cache
 
-## Test Execution Logs
+| Metric | Value |
+|--------|-------|
+| Cache hit rate | 85.3% (6,674 hits / 1,149 misses) |
+| Avg cache hit latency | 48ms |
+| Avg cache miss latency | 380ms (embedding 120ms + FAISS 260ms) |
 
-### k6 Output Summary
+### k6 Summary Output
+
 ```
-     ✓ status is 200
-     ✓ has results
-     ✓ has query hash
-
      cache_hit_rate.............: 85.30% ✓ 6674   ✗ 1149
-     cache_hits.................: 6674   52.1/s
-     cache_misses...............: 1149   9.0/s
-     data_received..............: 18 MB  120 kB/s
-     data_sent..................: 1.2 MB 8.1 kB/s
-     http_req_blocked...........: avg=12.4µs  min=1µs   med=4µs    max=8.2ms   p(95)=15µs   p(99)=38µs
-     http_req_connecting........: avg=3.1µs   min=0s    med=0s     max=4.8ms   p(95)=0s     p(99)=0s
      http_req_duration..........: avg=152.2ms min=18ms  med=48ms   max=890ms   p(95)=380ms  p(99)=425ms
-       { expected_response:true }: avg=152ms   min=18ms  med=48ms   max=890ms   p(95)=380ms  p(99)=425ms
      http_req_failed............: 0.08%  ✓ 6      ✗ 7817
-     http_req_receiving.........: avg=82.4µs  min=15µs  med=68µs   max=2.8ms   p(95)=180µs  p(99)=320µs
-     http_req_sending...........: avg=28.6µs  min=6µs   med=22µs   max=1.2ms   p(95)=65µs   p(99)=120µs
-     http_req_tls_handshaking...: avg=0s      min=0s    med=0s     max=0s      p(95)=0s     p(99)=0s
-     http_req_waiting...........: avg=152.1ms min=18ms  med=48ms   max=889ms   p(95)=379ms  p(99)=424ms
      http_reqs..................: 7823   52.1/s
-     iteration_duration.........: avg=402.8ms min=268ms med=368ms  max=1.42s   p(95)=650ms  p(99)=780ms
-     iterations.................: 7823   52.1/s
-     vus........................: 1      min=1    max=100
      vus_max....................: 100    min=100  max=100
 ```
 
-## Observability Validation
+---
 
-### Jaeger Traces
-- ✅ All searches produce OpenTelemetry spans with custom tags:
-  - `search.query_length`, `search.top_k`, `search.cache_hit`, `search.result_count`
-  - `embedding.text_length`, `embedding.dimension`, `embedding.model`
-- ✅ gRPC instrumentation captures sidecar latency breakdown
-- ✅ Parent-child span relationships correctly show API → Sidecar flow
+## AKS Production Projections
 
-### Prometheus Metrics
-- ✅ `/metrics` endpoint scraped every 15s
-- ✅ Custom metrics tracked:
-  - `vector_catalog_search_total` (counter)
-  - `vector_catalog_search_duration_seconds` (histogram)
-  - `vector_catalog_cache_hits_total` / `cache_misses_total` (counters)
-- ✅ ASP.NET Core built-in metrics:
-  - `http_server_request_duration_seconds`
-  - `process_cpu_seconds_total`, `process_memory_bytes`
+> These are linear extrapolations based on FAISS's documented O(nlist) sub-linear
+> search complexity and the measured single-shard latency above. Full-scale validation
+> (IVF4096, PQ32, 100M+ vectors) requires dedicated infrastructure and is pending.
 
-### Structured Logging
-- ✅ Correlation IDs propagate through all log entries
-- ✅ Request/response bodies logged for `/api/v1/search` (truncated to 500/1000 chars)
-- ✅ Serilog JSON format enables log aggregation in Azure Monitor
+### Expected Performance (3 API + 5 Sidecar pods)
 
-## Conclusion
+| Metric | Projected Value | Assumptions |
+|--------|-----------------|-------------|
+| P50 Latency | **100–150ms** | Warm cache, load balanced |
+| P99 Latency | **300–400ms** | Occasional cache misses |
+| Throughput | **500–800 qps** | 3 API pods × 150 qps + 5 Sidecar pods |
+| Cache Hit Rate | **80–90%** | Redis cluster with 4Gi cache |
+| Max Concurrent Users | **1,000+** | HPA scaling to 10 API pods |
 
-Vector Catalog Service **meets all Week 2 performance targets** with room for optimization:
-- **Latency**: P50=152ms (target <200ms), P99=425ms (target <500ms) ✅
-- **Cache Hit Rate**: 85.3% (target >70%) ✅
-- **Error Rate**: 0.08% (target <1%) ✅
-- **Throughput**: 52 qps on single API instance → projected 500-800 qps on AKS with HPA
+### Scaling Strategy
 
-**Production readiness**: System demonstrates production-grade characteristics including graceful degradation under load, effective caching strategy, comprehensive observability, and clear scaling path to handle 1,000+ concurrent users.
+| Load (qps) | API Pods | Sidecar Pods | Redis Size | Expected P99 |
+|------------|----------|--------------|------------|--------------|
+| < 100 | 2 | 3 | 2Gi | 200ms |
+| 100–300 | 3–5 | 5 | 4Gi | 300ms |
+| 300–600 | 5–8 | 7 | 8Gi | 350ms |
+| 600–1000 | 8–10 | 10 | 16Gi | 400ms |
+
+### Cost Analysis (Azure — East US)
+
+| Component | SKU | Monthly Cost |
+|-----------|-----|--------------|
+| AKS Control Plane | Standard | $73 |
+| Worker Nodes (3× D4s_v5) | 4 vCPU, 16 GB | $420 |
+| Managed Disk (50Gi Premium SSD) | P10 | $19 |
+| Load Balancer | Standard | $18 |
+| Bandwidth (1 TB egress) | Data Transfer | $87 |
+| **Total** | — | **$617/month** |
+
+---
+
+## Optimization Opportunities
+
+### Short-term
+1. **Fix Prometheus scrape target**: change `api:8081` → `api:8080` in `prometheus.yml`
+2. **Embedding caching**: cache embeddings by query hash → −30% P99 on cache misses
+3. **gRPC connection pooling**: increase pool from 10 → 50 → +15% throughput under load
+
+### Mid-term
+1. **FAISS index tuning**: IVF4096→IVF8192, PQ32→PQ24 → −20% FAISS latency
+2. **GPU acceleration**: NVIDIA T4 for embedding (120ms → 15ms); +$350/month on AKS
+3. **Multi-shard fan-out**: parallel queries across 3 shards → +50% throughput
+
+### Long-term
+1. **HNSW index**: better recall at similar latency; shardable to 1B+ vectors
+2. **Real-time ingestion**: Kafka consumer for live NYC Taxi data
+3. **Query prefetching**: ML model to predict next search sequences
 
 ---
 
 **Last Updated**: 2026-02-18
-**Test Environment**: Docker Compose (local), k6 v0.49, synthetic ~100K-vector FAISS index
-**Next Benchmark**: AKS deployment with 3 API + 5 Sidecar pods against full 100M-vector index
+**k6 version**: v1.6.1
+**Load test scripts**: `tests/load/` (see `tests/load/README.md`)
+**Next benchmark**: full-pipeline run after `scripts/build_faiss_index.py` completes

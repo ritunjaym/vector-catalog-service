@@ -56,3 +56,6 @@ node_modules/
 *.env
 .env
 secrets/
+
+# Load test raw output (summaries live in docs/BENCHMARKS.md)
+tests/load/results/*.json
