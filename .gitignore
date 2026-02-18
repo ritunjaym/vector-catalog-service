@@ -34,12 +34,18 @@ htmlcov/
 # Docker
 .docker/
 
-# Data & indices
-data/
-*.parquet
-*.index
-*.faiss
+# Data & indices (generated locally — not committed)
+data/raw/
+data/demo/
+data/embeddings/
 embeddings/
+*.parquet
+*.faiss
+
+# FAISS indices: ignore everything EXCEPT the committed demo index.
+# data/indexes/ is tracked; individual .index files are excluded by default
+# so only explicitly force-added files (e.g. nyc_taxi_2023.index) land in git.
+data/indexes/*.index
 
 # IDE
 .idea/

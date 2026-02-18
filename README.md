@@ -196,7 +196,51 @@ graph TB
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (One Command)
+
+```bash
+git clone https://github.com/ritunjaym/vector-catalog-service.git
+cd vector-catalog-service
+./scripts/run_demo.sh
+```
+
+**What this does:**
+1. Starts all 6 services (API, sidecar, Redis, Jaeger, Prometheus, MinIO)
+2. On first run (~5 min): downloads 10K real NYC taxi trips, generates sentence-transformer embeddings, builds FAISS IVF-PQ index
+3. On subsequent runs (<1 min): loads the pre-built index directly
+4. Runs two live searches — watch `cacheHit: true` and `totalLatencyMs` drop from ~150ms to ~3ms on the second identical query
+
+**Prerequisites:** Docker Desktop 24.0+ with Compose V2. Python 3 only needed for first-run data generation.
+
+**Expected output (first search, cold cache):**
+```json
+{
+  "results": [
+    {"id": 4523, "score": 0.18, "metadata": {"distance": "17.2", "fare": "52.50"}},
+    {"id": 8901, "score": 0.21, "metadata": {"distance": "16.8", "fare": "49.00"}},
+    ...
+  ],
+  "totalLatencyMs": 152.3,
+  "cacheHit": false,
+  "queryHash": "a8f3c1d2"
+}
+```
+
+**Expected output (same query again, cache hit):**
+```json
+{
+  "results": [ ... ],
+  "totalLatencyMs": 3.1,
+  "cacheHit": true,
+  "queryHash": "a8f3c1d2"
+}
+```
+
+**Demo dataset:** 10,000 real NYC yellow taxi trips (Jan 2023), pre-built FAISS IVF32,PQ8 index (~2MB). Proves the full production architecture with real data.
+
+---
+
+## Manual Setup
 
 ### Prerequisites
 
@@ -204,22 +248,11 @@ graph TB
 - .NET 8 SDK (for local development)
 - Python 3.12+ (for local development)
 
-### 1. Clone Repository
+### 1. Clone and Start
 
 ```bash
 git clone https://github.com/ritunjaym/vector-catalog-service.git
 cd vector-catalog-service
-```
-
-### 2. Create Index Directory
-
-```bash
-mkdir -p data/indexes
-```
-
-### 3. Start All Services
-
-```bash
 docker compose up -d
 ```
 
@@ -229,41 +262,26 @@ This starts:
 - **Prometheus**: http://localhost:9090
 - **MinIO Console**: http://localhost:9001 (minioadmin/minioadmin)
 
-### 4. Verify Health
+### 2. Verify Health
 
 ```bash
-curl http://localhost:8080/health/live
-# Expected: {"status":"Healthy","version":"0.1.0","uptime":"00:00:15"}
-
-curl http://localhost:8080/health/ready
-# Expected: {"status":"Healthy",...}
+curl http://localhost:8080/health/live   # → Healthy
+curl http://localhost:8080/health/ready  # → checks Redis + sidecar
 ```
 
-### 5. Example Search Query
+### 3. Build Demo Index (one-time)
 
-**Note**: Index must be built first (see [Development](#development) section).
+```bash
+python3 scripts/prepare_demo_data.py
+docker compose restart sidecar   # sidecar discovers the new index on startup
+```
+
+### 4. Search
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/search \
   -H "Content-Type: application/json" \
-  -d '{
-    "query": "taxi ride from manhattan to jfk airport",
-    "topK": 5,
-    "shardKey": "nyc_taxi_2023"
-  }'
-```
-
-**Response**:
-```json
-{
-  "results": [
-    {"id": 12345, "score": 0.87, "metadata": {...}},
-    ...
-  ],
-  "totalLatencyMs": 42.3,
-  "cacheHit": false,
-  "queryHash": "a1b2c3d4"
-}
+  -d '{"query":"taxi ride from manhattan to jfk airport","topK":5}'
 ```
 
 ---
@@ -503,18 +521,10 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-## 🤝 Contributing
+## Author
 
-Contributions welcome! Please open an issue or PR.
-
----
-
-## 📧 Contact
-
-**Ritunjay Mazumdar**
+**Ritunjay Murali**
 GitHub: [@ritunjaym](https://github.com/ritunjaym)
 Project: [vector-catalog-service](https://github.com/ritunjaym/vector-catalog-service)
 
----
-
-**Built with ❤️ to demonstrate production-ready microservices architecture**
+Designed to demonstrate production-ready ML infrastructure for Azure Data / OneLake SE II roles.
