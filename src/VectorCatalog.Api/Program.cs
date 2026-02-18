@@ -117,6 +117,11 @@ try
         options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     });
 
+    // ── Error Handling (RFC 7807 ProblemDetails) ──────────────────────────────
+    // Ensures all unhandled exceptions and 4xx/5xx responses return standardized
+    // application/problem+json payloads instead of empty or HTML bodies.
+    builder.Services.AddProblemDetails();
+
     // ── MVC / API ─────────────────────────────────────────────────────────────
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();
@@ -138,6 +143,12 @@ try
     var app = builder.Build();
 
     app.UseSerilogRequestLogging();
+
+    // Exception handler must be registered early so it can catch errors from
+    // downstream middleware. In .NET 8 + AddProblemDetails(), this automatically
+    // returns RFC 7807 application/problem+json for unhandled exceptions.
+    app.UseExceptionHandler();
+    app.UseStatusCodePages();
 
     if (app.Environment.IsDevelopment())
     {

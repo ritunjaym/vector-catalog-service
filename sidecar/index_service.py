@@ -5,6 +5,7 @@ Supports multi-shard indexing, hot reloading, and configurable search parameters
 """
 import logging
 import os
+import threading
 from typing import Dict, Optional
 import grpc
 import faiss
@@ -35,6 +36,11 @@ class ShardIndex:
         """
         self.shard_key = shard_key
         self.index_path = index_path
+        # Protects the index pointer swap during hot reload.
+        # Lock scope is kept minimal: search() holds it only long enough to
+        # capture a local reference; reload() holds it only for the pointer swap,
+        # not the (slow) file I/O.
+        self._lock = threading.Lock()
 
         if not os.path.exists(index_path):
             raise FileNotFoundError(f"Index file not found: {index_path}")
@@ -50,6 +56,11 @@ class ShardIndex:
         """
         Perform approximate nearest neighbor search.
 
+        Thread safety: acquires _lock briefly to snapshot the index reference,
+        then releases before the (potentially slow) FAISS search. This ensures
+        we always operate on a consistent index object even if a reload happens
+        concurrently.
+
         Args:
             query_vector: Query embedding (numpy array of shape [dimension])
             top_k: Number of nearest neighbors to return
@@ -58,33 +69,44 @@ class ShardIndex:
         Returns:
             Tuple of (distances, indices) - both numpy arrays of shape [top_k]
         """
+        # Snapshot the index reference under the lock so a concurrent reload
+        # cannot change self.index between our nprobe set and .search() call.
+        with self._lock:
+            index = self.index
+
         # Ensure query is 2D for FAISS (shape: [1, dimension])
         if query_vector.ndim == 1:
             query_vector = query_vector.reshape(1, -1)
 
         # Set nprobe parameter for IVF index
-        if hasattr(self.index, 'nprobe'):
-            self.index.nprobe = nprobe
+        if hasattr(index, 'nprobe'):
+            index.nprobe = nprobe
 
         # FAISS search returns (distances, indices)
-        distances, indices = self.index.search(query_vector, top_k)
+        distances, indices = index.search(query_vector, top_k)
 
         # Return flattened results (remove batch dimension)
         return distances[0], indices[0]
 
     def reload(self) -> bool:
         """
-        Hot reload the index from disk without downtime.
+        Hot reload the index from disk without downtime (blue-green swap).
+
+        File I/O happens outside the lock so in-flight searches are not blocked
+        during the (slow) disk read. Only the pointer swap itself is locked.
 
         Returns:
             True if reload succeeded, False otherwise
         """
         try:
             logger.info(f"Reloading index for shard '{self.shard_key}'")
+            # Load new index outside the lock — disk I/O can be slow
             new_index = faiss.read_index(self.index_path)
-            self.index = new_index
-            self.dimension = self.index.d
-            self.total_vectors = self.index.ntotal
+            # Atomic pointer swap — searches blocked only for this instant
+            with self._lock:
+                self.index = new_index
+                self.dimension = self.index.d
+                self.total_vectors = self.index.ntotal
             logger.info(f"Shard '{self.shard_key}' reloaded: {self.total_vectors} vectors")
             return True
         except Exception as e:

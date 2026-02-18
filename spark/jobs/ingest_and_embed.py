@@ -9,7 +9,7 @@ import time
 import logging
 from datetime import datetime
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import udf, col, concat_ws, lit
+from pyspark.sql.functions import udf, col, concat_ws, lit, year, month
 from pyspark.sql.types import ArrayType, FloatType
 import grpc
 
@@ -167,19 +167,23 @@ def main():
             embedding_udf(col("text_repr"))
         )
 
-        # Add metadata columns
+        # Add metadata columns + year/month partition keys extracted from pickup datetime.
+        # Partitioning by pickup_year/pickup_month enables partition pruning when
+        # queries are scoped to a time range (e.g., "find similar rides from 2023").
         df_final = (df_with_embeddings
                     .withColumn("ingestion_timestamp", lit(datetime.utcnow()))
                     .withColumn("model_name", lit("all-MiniLM-L6-v2"))
-                    .withColumn("embedding_dimension", lit(384)))
+                    .withColumn("embedding_dimension", lit(384))
+                    .withColumn("pickup_year", year(col("tpep_pickup_datetime")))
+                    .withColumn("pickup_month", month(col("tpep_pickup_datetime"))))
 
-        # Write to Delta Lake (partitioned by year/month for efficient queries)
+        # Write to Delta Lake partitioned by year/month for efficient time-scoped queries.
         logger.info(f"Writing to Delta Lake: {DELTA_OUTPUT_PATH}")
         (df_final
          .write
          .format("delta")
          .mode("overwrite")  # Change to "append" for incremental loads
-         .partitionBy("VendorID")
+         .partitionBy("pickup_year", "pickup_month")
          .save(DELTA_OUTPUT_PATH))
 
         logger.info("✓ Ingestion job completed successfully!")

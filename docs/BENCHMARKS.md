@@ -2,6 +2,22 @@
 
 Vector Catalog Service performance metrics from k6 load testing on local Docker Compose environment and projected AKS production deployment.
 
+> **Reproducibility Note**
+>
+> The latency and throughput numbers below were measured against a **synthetic
+> development FAISS index** (IVF100, PQ8, ~100K vectors on the NYC Taxi 2023-01
+> dataset). The "100M vectors" figure referenced in architecture documentation
+> describes the target production scale, not the local test dataset.
+>
+> **100M+ scale projections** in the AKS section are linear extrapolations based
+> on FAISS's documented O(nlist) sub-linear search complexity and the measured
+> single-shard latency. Full-scale validation (IVF4096, PQ32, 100M+ vectors)
+> requires dedicated infrastructure (Azure Standard_D16s_v5 or equivalent) and
+> is pending.
+>
+> **To reproduce locally:** `docker compose up -d && k6 run scripts/load_test.js`
+> (requires a pre-built FAISS index in `data/indexes/`; see `scripts/build_faiss_index.py`).
+
 ## Test Environment
 
 ### Local Docker Compose (Baseline)
@@ -213,6 +229,6 @@ Vector Catalog Service **meets all Week 2 performance targets** with room for op
 
 ---
 
-**Last Updated**: 2025-01-XX
-**Test Environment**: Docker Compose (local), k6 v0.49
-**Next Benchmark**: Week 4 - AKS deployment with 3 API + 5 Sidecar pods
+**Last Updated**: 2026-02-18
+**Test Environment**: Docker Compose (local), k6 v0.49, synthetic ~100K-vector FAISS index
+**Next Benchmark**: AKS deployment with 3 API + 5 Sidecar pods against full 100M-vector index
