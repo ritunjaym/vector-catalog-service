@@ -1,0 +1,40 @@
+# .dockerignore for VectorCatalog.Api
+# Keep the build context small — only C# source/config is needed
+
+# Build artifacts
+**/bin/
+**/obj/
+**/publish/
+
+# Test projects
+**/tests/
+
+# IDE / OS
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docs / scripts (not needed at build time)
+docs/
+scripts/
+infra/
+sidecar/
+
+# Secrets
+*.env
+.env
+secrets/
+
+# Node / Python artefacts (shouldn't be here, but be safe)
+node_modules/
+__pycache__/
+*.pyc

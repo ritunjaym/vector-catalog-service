@@ -104,23 +104,22 @@ services:
       dockerfile: src/VectorCatalog.Api/Dockerfile
     container_name: vector-catalog-api
     ports:
-      - "8080:8080"      # HTTP API
-      - "8081:8081"      # Prometheus metrics
+      - "8080:8080"      # HTTP API + Prometheus /metrics
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      VectorCatalogOptions__Sidecar__GrpcAddress: http://sidecar:50051
-      VectorCatalogOptions__Redis__ConnectionString: redis:6379
-      VectorCatalogOptions__Redis__KeyPrefix: "vc:"
-      VectorCatalogOptions__Redis__DefaultCacheTtlSeconds: 300
-      VectorCatalogOptions__Faiss__TopK: 10
-      VectorCatalogOptions__Faiss__Nprobe: 10
-      VectorCatalogOptions__Faiss__DefaultShardKey: nyc_taxi_2023
-      VectorCatalogOptions__Storage__MinioEndpoint: minio:9000
-      VectorCatalogOptions__Storage__AccessKey: minioadmin
-      VectorCatalogOptions__Storage__SecretKey: minioadmin
-      VectorCatalogOptions__RateLimit__PermitLimit: 100
-      VectorCatalogOptions__RateLimit__WindowSeconds: 10
+      VectorCatalog__SidecarGrpcAddress: http://sidecar:50051
+      VectorCatalog__Redis__ConnectionString: redis:6379
+      VectorCatalog__Redis__KeyPrefix: "vc:"
+      VectorCatalog__Redis__DefaultCacheTtlSeconds: 300
+      VectorCatalog__Faiss__DefaultTopK: 10
+      VectorCatalog__Faiss__DefaultNprobe: 10
+      VectorCatalog__Faiss__DefaultShardKey: nyc_taxi_2023
+      VectorCatalog__Storage__MinioEndpoint: http://minio:9000
+      VectorCatalog__Storage__MinioAccessKey: minioadmin
+      VectorCatalog__Storage__MinioSecretKey: minioadmin
+      VectorCatalog__RateLimit__PermitLimit: 100
+      VectorCatalog__RateLimit__WindowSeconds: 10
     depends_on:
       redis:
         condition: service_healthy

@@ -124,8 +124,7 @@ check: `GET /health/ready` → 200 OK (Redis dependency healthy).
 - `error_type="Grpc.Core.RpcException"` label on 500 responses confirms gRPC error
   propagation is instrumented ✅
 - Jaeger traces confirm parent-child span relationships (API → gRPC sidecar) ✅
-- Note: `prometheus.yml` scrape target points to port 8081 (incorrect); fix pending.
-  Direct scrape via `curl localhost:8080/metrics` works correctly.
+- `prometheus.yml` scrape target: `api:8080` ✅ (fixed — was incorrectly `api:8081`)
 
 ---
 
@@ -217,7 +216,7 @@ check: `GET /health/ready` → 200 OK (Redis dependency healthy).
 ## Optimization Opportunities
 
 ### Short-term
-1. **Fix Prometheus scrape target**: change `api:8081` → `api:8080` in `prometheus.yml`
+1. ~~**Fix Prometheus scrape target**~~: fixed (`api:8080` in `prometheus.yml`) ✅
 2. **Embedding caching**: cache embeddings by query hash → −30% P99 on cache misses
 3. **gRPC connection pooling**: increase pool from 10 → 50 → +15% throughput under load
 

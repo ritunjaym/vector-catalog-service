@@ -39,8 +39,8 @@ RUN chown -R appuser:appuser /app
 # Switch to non-root user
 USER appuser
 
-# Expose ports
-EXPOSE 8080 8081
+# Expose HTTP port (API + /metrics endpoint)
+EXPOSE 8080
 
 # Environment variables (can be overridden at runtime)
 ENV ASPNETCORE_URLS=http://+:8080 \

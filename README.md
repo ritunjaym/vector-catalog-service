@@ -190,9 +190,9 @@ graph TB
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| **CI/CD** | GitHub Actions | 7-job pipeline (build, test, security scan) |
+| **CI/CD** | GitHub Actions | 8-job pipeline (build, test, security scan, GHCR push) |
 | **Containers** | Docker + Compose | Multi-stage builds, non-root users |
-| **IaC** | docker-compose.yml | Local orchestration (7 services) |
+| **IaC** | docker-compose.yml | Local orchestration (6 services) |
 
 ---
 
@@ -390,10 +390,10 @@ dotnet run --project src/VectorCatalog.Api/VectorCatalog.Api.csproj
 ### Unit Tests
 
 ```bash
-# C# tests (8 tests)
+# C# unit tests (7 tests)
 dotnet test tests/VectorCatalog.Api.Tests/
 
-# Python tests (16 tests)
+# Python tests
 cd sidecar && pytest tests/ -v
 ```
 
@@ -407,21 +407,24 @@ dotnet test tests/VectorCatalog.Integration.Tests/
 ### Load Testing (k6)
 
 ```bash
-k6 run tests/load/search_load_test.js --vus 50 --duration 30s
+k6 run tests/load/health_load.js
+k6 run tests/load/search_load.js --out json=tests/load/results/search_results.json
 ```
 
 ---
 
 ## 📊 Performance Benchmarks
 
-| Metric | Value | Configuration |
-|--------|-------|---------------|
-| **Query Latency (p50)** | 45ms | Redis cache miss, nprobe=10 |
-| **Query Latency (p99)** | 120ms | Cold cache, complex query |
-| **Throughput** | 500 QPS | 4 CPU, 8GB RAM, local |
-| **Cache Hit Rate** | 78% | After 10K queries |
-| **Index Build Time** | 15 min | 1M vectors, nlist=100 |
-| **Index Size** | 150 MB | 1M vectors (100x compression) |
+Measured with k6 v1.6.1 on Apple M2 / Docker Compose. See [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) for full results.
+
+| Metric | Value | Scenario |
+|--------|-------|----------|
+| **Health P95** | 31ms | GET /health/live, 200 VUs |
+| **Health Throughput** | 17,396 req/s | ASP.NET Core baseline |
+| **Search P50** | 152ms | Warm Redis cache, synthetic FAISS index |
+| **Search P99** | 425ms | Warm Redis cache, synthetic FAISS index |
+| **Cache Hit Rate** | 85.3% | 6,674 hits / 7,823 requests |
+| **Avg Cache Hit Latency** | 48ms | Redis round-trip |
 
 ---
 
@@ -430,13 +433,14 @@ k6 run tests/load/search_load_test.js --vus 50 --duration 30s
 ### Docker
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d
+docker compose up -d
 ```
 
-### Kubernetes (Helm Chart - Coming Soon)
+### Kubernetes (Helm)
 
 ```bash
-helm install vector-catalog ./charts/vector-catalog
+helm install vector-catalog ./helm/vector-catalog \
+  --set image.tag=$(git rev-parse --short HEAD)
 ```
 
 ---
@@ -486,8 +490,8 @@ rate(redis_commands_total{command="get",status="hit"}[5m]) / rate(redis_commands
 - [ ] Kubernetes Helm chart
 
 ### Week 3: Production Hardening
-- [ ] Integration tests with Testcontainers
-- [ ] Load testing with k6
+- [x] Integration tests with Testcontainers (12/12 passing)
+- [x] Load testing with k6 (17,396 req/s baseline; Polly behavior documented)
 - [ ] APM (Application Performance Monitoring)
 - [ ] Alert rules (Prometheus + Alertmanager)
 
