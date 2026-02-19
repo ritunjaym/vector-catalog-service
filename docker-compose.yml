@@ -1,0 +1,187 @@
+services:
+  # ══════════════════════════════════════════════════════════════════════════
+  # Redis Cache (LRU eviction for search result caching)
+  # ══════════════════════════════════════════════════════════════════════════
+  redis:
+    image: redis:7-alpine
+    container_name: vector-catalog-redis
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - vector-catalog-net
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # MinIO (S3-compatible object storage for Delta Lake and indexes)
+  # ══════════════════════════════════════════════════════════════════════════
+  minio:
+    image: minio/minio:latest
+    container_name: vector-catalog-minio
+    ports:
+      - "9000:9000"      # S3 API
+      - "9001:9001"      # Web Console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - vector-catalog-net
+
+  # ── MinIO bucket initialization ───────────────────────────────────────────
+  minio-init:
+    image: minio/mc:latest
+    container_name: vector-catalog-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      mc mb myminio/delta-lake --ignore-existing;
+      mc mb myminio/indexes --ignore-existing;
+      mc mb myminio/raw-data --ignore-existing;
+      echo 'MinIO buckets initialized successfully';
+      "
+    networks:
+      - vector-catalog-net
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # Python gRPC Sidecar (Embedding + FAISS Index Service)
+  # ══════════════════════════════════════════════════════════════════════════
+  sidecar:
+    build:
+      context: ./sidecar
+      dockerfile: Dockerfile
+    container_name: vector-catalog-sidecar
+    ports:
+      - "50051:50051"
+    environment:
+      GRPC_PORT: 50051
+      INDEX_DIR: /data/indexes
+      EMBEDDING_MODEL: all-MiniLM-L6-v2
+      MAX_WORKERS: 10
+    volumes:
+      - ./data/indexes:/data/indexes:ro  # Read-only mount for FAISS indexes
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; s=socket.socket(); s.settimeout(3); s.connect(('localhost', 50051)); s.close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - vector-catalog-net
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # .NET 8 Web API (RESTful search endpoint + observability)
+  # ══════════════════════════════════════════════════════════════════════════
+  api:
+    build:
+      context: .
+      dockerfile: src/VectorCatalog.Api/Dockerfile
+    container_name: vector-catalog-api
+    ports:
+      - "8080:8080"      # HTTP API + Prometheus /metrics
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      VectorCatalog__SidecarGrpcAddress: http://sidecar:50051
+      VectorCatalog__Redis__ConnectionString: redis:6379
+      VectorCatalog__Redis__KeyPrefix: "vc:"
+      VectorCatalog__Redis__DefaultCacheTtlSeconds: 300
+      VectorCatalog__Faiss__DefaultTopK: 10
+      VectorCatalog__Faiss__DefaultNprobe: 10
+      VectorCatalog__Faiss__DefaultShardKey: nyc_taxi_2023
+      VectorCatalog__Storage__MinioEndpoint: http://minio:9000
+      VectorCatalog__Storage__MinioAccessKey: minioadmin
+      VectorCatalog__Storage__MinioSecretKey: minioadmin
+      VectorCatalog__RateLimit__PermitLimit: 100
+      VectorCatalog__RateLimit__WindowSeconds: 10
+    depends_on:
+      redis:
+        condition: service_healthy
+      sidecar:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/live"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - vector-catalog-net
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # Jaeger (Distributed tracing for OpenTelemetry)
+  # ══════════════════════════════════════════════════════════════════════════
+  jaeger:
+    image: jaegertracing/all-in-one:1.52
+    container_name: vector-catalog-jaeger
+    ports:
+      - "6831:6831/udp"  # Jaeger compact thrift (legacy)
+      - "16686:16686"    # Jaeger UI
+      - "14268:14268"    # Jaeger HTTP collector
+    environment:
+      COLLECTOR_OTLP_ENABLED: true
+    networks:
+      - vector-catalog-net
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # Prometheus (Metrics aggregation and alerting)
+  # ══════════════════════════════════════════════════════════════════════════
+  prometheus:
+    image: prom/prometheus:v2.48.1
+    container_name: vector-catalog-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - vector-catalog-net
+
+networks:
+  vector-catalog-net:
+    driver: bridge
+
+volumes:
+  minio-data:
+  prometheus-data:

@@ -1,0 +1,95 @@
+# ── API Service (LoadBalancer for external traffic) ──────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vector-catalog.api.name" . }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "vector-catalog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+  {{- with .Values.api.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.api.service.type }}
+  ports:
+  - port: {{ .Values.api.service.port }}
+    targetPort: {{ .Values.api.service.targetPort }}
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "vector-catalog.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+---
+# ── Sidecar Service (ClusterIP for internal gRPC communication) ──────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vector-catalog.sidecar.name" . }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "vector-catalog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sidecar
+spec:
+  type: {{ .Values.sidecar.service.type }}
+  ports:
+  - port: {{ .Values.sidecar.service.port }}
+    targetPort: {{ .Values.sidecar.service.targetPort }}
+    protocol: TCP
+    name: grpc
+  selector:
+    {{- include "vector-catalog.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: sidecar
+---
+# ── Redis Service (ClusterIP for internal cache access) ───────────────────────
+{{- if .Values.redis.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vector-catalog.redis.name" . }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "vector-catalog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  type: {{ .Values.redis.service.type }}
+  ports:
+  - port: {{ .Values.redis.service.port }}
+    targetPort: 6379
+    protocol: TCP
+    name: redis
+  selector:
+    {{- include "vector-catalog.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+{{- end }}
+---
+# ── Jaeger Service (LoadBalancer for external UI access) ──────────────────────
+{{- if .Values.jaeger.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vector-catalog.jaeger.name" . }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "vector-catalog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: jaeger
+spec:
+  type: {{ .Values.jaeger.service.type }}
+  ports:
+  - port: {{ .Values.jaeger.service.ports.ui }}
+    targetPort: 16686
+    protocol: TCP
+    name: ui
+  - port: {{ .Values.jaeger.service.ports.collector }}
+    targetPort: 14268
+    protocol: TCP
+    name: collector
+  - port: {{ .Values.jaeger.service.ports.zipkin }}
+    targetPort: 9411
+    protocol: TCP
+    name: zipkin
+  selector:
+    {{- include "vector-catalog.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: jaeger
+{{- end }}

@@ -1,0 +1,23 @@
+{{- if .Values.sidecar.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "vector-catalog.sidecar.name" . }}-pvc
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "vector-catalog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sidecar-storage
+spec:
+  accessModes:
+    - {{ .Values.sidecar.persistence.accessMode }}
+  storageClassName: {{ .Values.sidecar.persistence.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.sidecar.persistence.size }}
+---
+# Note: In production, you would pre-populate this PVC with the FAISS index via:
+#   1. Build index with ingestion pipeline (PySpark on Databricks/EMR)
+#   2. Upload to Azure Blob Storage or S3
+#   3. Use init container to download index to PVC on pod startup
+#   4. Or use CSI driver to mount blob storage directly as volume
+{{- end }}

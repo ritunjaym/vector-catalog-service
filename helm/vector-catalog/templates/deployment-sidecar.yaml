@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vector-catalog.sidecar.name" . }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "vector-catalog.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sidecar
+spec:
+  replicas: {{ .Values.sidecar.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "vector-catalog.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: sidecar
+  template:
+    metadata:
+      labels:
+        {{- include "vector-catalog.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: sidecar
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: sidecar
+        image: "{{ .Values.sidecar.image.repository }}:{{ .Values.sidecar.image.tag }}"
+        imagePullPolicy: {{ .Values.sidecar.image.pullPolicy }}
+        ports:
+        - name: grpc
+          containerPort: 50051
+          protocol: TCP
+        env:
+        {{- toYaml .Values.sidecar.env | nindent 8 }}
+        volumeMounts:
+        {{- if .Values.sidecar.persistence.enabled }}
+        - name: faiss-index
+          mountPath: /data/faiss
+          readOnly: true
+        {{- end }}
+        livenessProbe:
+          {{- toYaml .Values.sidecar.healthCheck.livenessProbe | nindent 10 }}
+        readinessProbe:
+          {{- toYaml .Values.sidecar.healthCheck.readinessProbe | nindent 10 }}
+        resources:
+          {{- toYaml .Values.sidecar.resources | nindent 10 }}
+      volumes:
+      {{- if .Values.sidecar.persistence.enabled }}
+      - name: faiss-index
+        persistentVolumeClaim:
+          claimName: {{ include "vector-catalog.sidecar.name" . }}-pvc
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
