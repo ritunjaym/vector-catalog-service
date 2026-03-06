@@ -79,7 +79,7 @@ def create_embedding_udf():
 
 
 def create_spark_session():
-    """Create Spark session with Delta Lake support"""
+    """Create Spark session with Delta Lake support and AQE optimizations."""
     return (SparkSession.builder
             .appName("NYCTaxi-Ingestion-Embedding")
             .config("spark.jars.packages", "io.delta:delta-spark_2.12:3.1.0")
@@ -88,6 +88,16 @@ def create_spark_session():
             .config("spark.sql.shuffle.partitions", "8")
             .config("spark.executor.memory", "4g")
             .config("spark.driver.memory", "2g")
+            # Adaptive Query Execution (AQE) — Spark 3.x:
+            # Dynamically coalesces shuffle partitions to reduce small-file overhead
+            # at 100M+ record scale where static partition counts cause imbalance.
+            .config("spark.sql.adaptive.enabled", "true")
+            # Merges small post-shuffle partitions into target size (~64MB default)
+            # preventing thousands of tiny tasks on the taxi embedding pipeline.
+            .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
+            # Splits skewed partitions (e.g., popular pickup zones with 10x more
+            # records than average) to prevent stragglers from blocking the stage.
+            .config("spark.sql.adaptive.skewJoin.enabled", "true")
             .getOrCreate())
 
 

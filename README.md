@@ -1,6 +1,7 @@
 # Vector Catalog Service
 
 [![CI Pipeline](https://github.com/ritunjaym/vector-catalog-service/actions/workflows/ci.yml/badge.svg)](https://github.com/ritunjaym/vector-catalog-service/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/ritunjaym/vector-catalog-service/branch/main/graph/badge.svg)](https://codecov.io/gh/ritunjaym/vector-catalog-service)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > **Production-ready microservice for vector search over 100M+ NYC Taxi records**

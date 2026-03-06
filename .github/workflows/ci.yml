@@ -44,6 +44,15 @@ jobs:
       - name: Run unit tests
         run: dotnet test tests/VectorCatalog.Api.Tests/VectorCatalog.Api.Tests.csproj --configuration Release --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx"
 
+      - name: Test with coverage
+        run: dotnet test --configuration Release --collect:"XPlat Code Coverage" --results-directory ./coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          directory: ./coverage
+          fail_ci_if_error: false
+
       - name: Publish test results
         uses: dorny/test-reporter@v1
         if: always()
@@ -69,6 +78,11 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
+
+      - name: Lint with flake8
+        run: |
+          pip install flake8
+          flake8 sidecar/ spark/ scripts/ --max-line-length=120 --exclude=*_pb2*.py,*_pb2_grpc.py
 
       - name: Install sidecar dependencies
         working-directory: ./sidecar
