@@ -595,10 +595,33 @@ rate(redis_commands_total{command="get",status="hit"}[5m]) / rate(redis_commands
 
 ---
 
+## 🚀 Live Demo
+
+The service is deployed on **Azure Container Apps** (East US):
+
+| Endpoint | URL |
+|---|---|
+| Health check | `https://vector-catalog-api.politefield-8fe8e6a2.eastus.azurecontainerapps.io/health` |
+| Search API | `https://vector-catalog-api.politefield-8fe8e6a2.eastus.azurecontainerapps.io/api/v1/search` |
+| Metrics | `https://vector-catalog-api.politefield-8fe8e6a2.eastus.azurecontainerapps.io/metrics` |
+
+```bash
+# Quick smoke test
+curl https://vector-catalog-api.politefield-8fe8e6a2.eastus.azurecontainerapps.io/health
+
+# Semantic search
+curl -X POST https://vector-catalog-api.politefield-8fe8e6a2.eastus.azurecontainerapps.io/api/v1/search \
+  -H "Content-Type: application/json" \
+  -d '{"query":"JFK to Manhattan rush hour","topK":5}'
+```
+
+---
+
 ## 📝 Technical Deep-Dive
 
-- [Architecture Decisions & Benchmarks](./TECHNICAL_DEEP_DIVE.md)
+- [Architecture Decisions & Benchmarks](./docs/BENCHMARKS.md)
 - [Building Production Vector Search (Blog)](docs/BLOG_POST.md)
+- [SLA & Error Budget](docs/SLA.md)
 
 ### Incremental Ingestion
 

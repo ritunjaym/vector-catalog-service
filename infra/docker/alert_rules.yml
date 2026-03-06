@@ -1,0 +1,72 @@
+groups:
+  - name: vector_catalog_alerts
+    interval: 30s
+    rules:
+
+      # ── Circuit Breaker ───────────────────────────────────────────────────────
+      - alert: CircuitBreakerOpen
+        expr: vector_catalog_circuit_breaker_state > 0
+        for: 30s
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Circuit breaker is open"
+          description: >
+            The Polly circuit breaker has been open for >30s.
+            Downstream gRPC calls to the sidecar are being short-circuited.
+            Check sidecar health and gRPC connectivity.
+          runbook: "https://github.com/ritunjaym/vector-catalog-service/blob/main/docs/SLA.md"
+
+      # ── P99 Search Latency ────────────────────────────────────────────────────
+      - alert: P99LatencyHigh
+        expr: >
+          histogram_quantile(0.99,
+            rate(vector_catalog_search_latency_ms_bucket[5m])
+          ) > 500
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "P99 search latency above 500 ms"
+          description: >
+            P99 end-to-end search latency has exceeded 500 ms for 2 minutes.
+            Current value: {{ $value | printf "%.0f" }} ms.
+            Investigate FAISS nprobe setting, Redis cache hit rate, and Spark job lag.
+          runbook: "https://github.com/ritunjaym/vector-catalog-service/blob/main/docs/SLA.md"
+
+      # ── Cache Hit Rate ────────────────────────────────────────────────────────
+      - alert: CacheHitRateLow
+        expr: vector_catalog_cache_hit_rate < 0.70
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Redis cache hit rate below 70%"
+          description: >
+            Cache hit rate has dropped below 70% for 5 minutes.
+            Current rate: {{ $value | printf "%.1%%" }}.
+            Check Redis eviction policy, memory limits, and TTL configuration.
+          runbook: "https://github.com/ritunjaym/vector-catalog-service/blob/main/docs/SLA.md"
+
+      # ── Error Rate ────────────────────────────────────────────────────────────
+      - alert: ErrorRateHigh
+        expr: >
+          (
+            rate(vector_catalog_requests_total{status=~"5.."}[5m])
+            /
+            rate(vector_catalog_requests_total[5m])
+          ) > 0.01
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "HTTP 5xx error rate above 1%"
+          description: >
+            The 5-minute rolling error rate has exceeded 1% for 1 minute.
+            Current rate: {{ $value | printf "%.2%%" }}.
+            Check API logs and downstream service health.
+          runbook: "https://github.com/ritunjaym/vector-catalog-service/blob/main/docs/SLA.md"

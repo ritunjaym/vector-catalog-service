@@ -5,6 +5,9 @@ global:
     cluster: 'vector-catalog-dev'
     environment: 'local'
 
+rule_files:
+  - "alert_rules.yml"
+
 scrape_configs:
   # ══════════════════════════════════════════════════════════════════════════
   # Vector Catalog API (.NET metrics)

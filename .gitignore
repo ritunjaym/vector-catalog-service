@@ -58,10 +58,15 @@ Thumbs.db
 # Node
 node_modules/
 
-# Secrets
+# Secrets & SSH keys
 *.env
 .env
 secrets/
+y
+y.pub
+*.pem
+id_rsa
+id_ed25519
 
 # Load test raw output (summaries live in docs/BENCHMARKS.md)
 tests/load/results/*.json
