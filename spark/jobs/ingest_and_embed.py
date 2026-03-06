@@ -15,8 +15,8 @@ import grpc
 
 # Add sidecar protos to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../sidecar')))
-import vector_service_pb2
-import vector_service_pb2_grpc
+import vector_service_pb2  # noqa: E402
+import vector_service_pb2_grpc  # noqa: E402
 
 # Configure logging
 logging.basicConfig(

@@ -75,9 +75,9 @@ def download_sample() -> str:
 
     # Filter to valid trips only
     df = df[
-        (df['trip_distance'] > 0.1) &
-        (df['fare_amount']   > 2.5) &
-        (df['passenger_count'].between(1, 6))
+        (df['trip_distance'] > 0.1)
+        & (df['fare_amount'] > 2.5)
+        & (df['passenger_count'].between(1, 6))
     ].copy()
 
     df_sample = df.sample(n=SAMPLE_SIZE, random_state=RANDOM_SEED).reset_index(drop=True)
