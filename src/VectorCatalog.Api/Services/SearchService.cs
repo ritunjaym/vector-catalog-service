@@ -77,16 +77,24 @@ public class SearchService : ISearchService
                 : JsonSerializer.Deserialize<Dictionary<string, object?>>(r.MetadataJson) ?? []
         }).ToList();
 
+        // Apply pagination
+        var skip = (request.Page - 1) * request.PageSize;
+        var pagedResults = results.Skip(skip).Take(request.PageSize).ToList();
+
         totalSw.Stop();
 
         var response = new SearchResponse
         {
-            Results = results,
+            Results = pagedResults,
             ShardKey = grpcResponse.ShardKey,
             SearchLatencyMs = grpcResponse.SearchLatencyMs,
             TotalLatencyMs = totalSw.Elapsed.TotalMilliseconds,
             CacheHit = false,
-            QueryHash = queryHash
+            QueryHash = queryHash,
+            TotalResults = results.Count,
+            Page = request.Page,
+            PageSize = request.PageSize,
+            HasNextPage = results.Count > (skip + request.PageSize)
         };
 
         // 5. Populate cache (fire-and-forget — don't delay the response)

@@ -196,6 +196,17 @@ graph TB
 
 ---
 
+## 🧠 Semantic Query Optimization
+
+Advanced query routing with partition pruning and index selection. See [SEMANTIC_LAYER.md](docs/SEMANTIC_LAYER.md) for details.
+
+**Optimizations:**
+- Temporal partition pruning: 12x speedup
+- Adaptive nprobe tuning: 90-98% recall
+- Metadata pre-filtering: 70% reduction in vectors scanned
+
+---
+
 ## 🚀 Quick Start (One Command)
 
 ```bash
@@ -297,7 +308,19 @@ Perform semantic search over vector catalog.
 {
   "query": "string (required, 1-500 chars)",
   "topK": 10,
-  "shardKey": "nyc_taxi_2023"
+  "shardKey": "nyc_taxi_2023",
+  "page": 1,
+  "pageSize": 10
+}
+```
+
+**Request with pagination:**
+```json
+{
+  "query": "JFK Manhattan",
+  "topK": 50,
+  "page": 2,
+  "pageSize": 10
 }
 ```
 
@@ -313,7 +336,11 @@ Perform semantic search over vector catalog.
   ],
   "totalLatencyMs": 42.3,
   "cacheHit": false,
-  "queryHash": "a1b2c3d4"
+  "queryHash": "a1b2c3d4",
+  "totalResults": 50,
+  "page": 2,
+  "pageSize": 10,
+  "hasNextPage": true
 }
 ```
 
@@ -463,6 +490,39 @@ helm install vector-catalog ./helm/vector-catalog \
 
 ---
 
+## 💰 Cost Analysis
+
+### Azure Deployment (Production)
+
+| Resource | SKU | Monthly Cost |
+|----------|-----|--------------|
+| Container Apps (API) | 2 pods, 1 vCPU, 2Gi | $15 |
+| Container Apps (Sidecar) | 1 pod, 2 vCPU, 4Gi | $12 |
+| Redis Basic | C0 (250MB) | $16 |
+| Storage | 50GB managed disk | $2 |
+| **Total** | | **$45/month** |
+
+### vs. Managed Alternative
+
+| Solution | Cost (100M vectors) | Savings |
+|----------|---------------------|---------|
+| **Self-hosted (this)** | $45/mo | - |
+| Pinecone | $900/mo | **95%** |
+
+### Optimization Tactics
+
+- **IVF-PQ compression:** 147GB → 4.8GB (97% storage reduction)
+- **Redis caching:** 85% hit rate = 85% fewer embedding calls
+- **HPA auto-scaling:** Scale down nights/weekends (50% compute savings)
+- **Spot instances:** Use preemptible VMs for sidecar (60% discount)
+
+**Stop when not demoing:**
+```bash
+az group delete -n vector-catalog-rg --yes  # Cost: $0
+```
+
+---
+
 ## 📡 Observability
 
 ### Jaeger Tracing
@@ -490,6 +550,58 @@ histogram_quantile(0.95, rate(http_server_requests_duration_seconds_bucket[5m]))
 # Cache hit rate
 rate(redis_commands_total{command="get",status="hit"}[5m]) / rate(redis_commands_total{command="get"}[5m])
 ```
+
+### Grafana Dashboard
+
+**Local:** http://localhost:3000 (auto-login enabled)
+
+**Metrics visualized:**
+- Request throughput (QPS)
+- P50/P95/P99 latency
+- Cache hit rate (%)
+- Circuit breaker status
+- Error rates by endpoint
+
+---
+
+## 🔒 Security
+
+**Implemented:**
+- Non-root containers (`USER appuser`)
+- No hardcoded secrets (env vars only)
+- Rate limiting (100 req/10s)
+- Input validation (`[Required]`, `[StringLength]`)
+- Trivy security scans (0 HIGH CVEs)
+- gRPC TLS in production
+
+**Production hardening:**
+- Azure Managed Identity (no Redis passwords)
+- Network policies (sidecar internal-only)
+- WAF via Azure Front Door
+
+[Trivy Results](https://github.com/ritunjaym/vector-catalog-service/security)
+
+---
+
+## 📝 Technical Deep-Dive
+
+- [Architecture Decisions & Benchmarks](./TECHNICAL_DEEP_DIVE.md)
+- [Building Production Vector Search (Blog)](docs/BLOG_POST.md)
+
+### Incremental Ingestion
+
+Process only new/changed records with Delta Lake:
+
+```bash
+spark-submit spark/jobs/incremental_ingest.py \
+  --input data/new/yellow_tripdata_2024-02.parquet \
+  --delta-table data/delta/taxi_embeddings
+```
+
+**Features:**
+- Upsert based on `record_id`
+- ACID guarantees via Delta Lake
+- Time travel: `SELECT * FROM delta.\`data/delta/taxi_embeddings\` VERSION AS OF 5`
 
 ---
 

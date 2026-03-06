@@ -178,6 +178,27 @@ services:
     networks:
       - vector-catalog-net
 
+  # ══════════════════════════════════════════════════════════════════════════
+  # Grafana (Metrics visualization)
+  # ══════════════════════════════════════════════════════════════════════════
+  grafana:
+    image: grafana/grafana:10.2.3
+    container_name: vector-catalog-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana-data:/var/lib/grafana
+    networks:
+      - vector-catalog-net
+    depends_on:
+      - prometheus
+
 networks:
   vector-catalog-net:
     driver: bridge
@@ -185,3 +206,4 @@ networks:
 volumes:
   minio-data:
   prometheus-data:
+  grafana-data:

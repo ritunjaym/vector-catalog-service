@@ -18,6 +18,13 @@ public class SearchRequest
 
     [Range(1, 256)]
     public int? Nprobe { get; set; }
+
+    // Pagination
+    [Range(1, 100)]
+    public int PageSize { get; set; } = 10;
+
+    [Range(1, int.MaxValue)]
+    public int Page { get; set; } = 1;
 }
 
 public class SearchResponse
@@ -28,6 +35,12 @@ public class SearchResponse
     public double TotalLatencyMs { get; set; }
     public bool CacheHit { get; set; }
     public string QueryHash { get; set; } = string.Empty;
+
+    // Pagination metadata
+    public int TotalResults { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+    public bool HasNextPage { get; set; }
 }
 
 public class SearchResultItem
