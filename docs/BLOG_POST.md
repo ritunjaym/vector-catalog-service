@@ -50,4 +50,4 @@ return results;
 2. **Chaos testing early:** Found thread-safety bug in production
 3. **Resilience > Accuracy:** Circuit breakers matter more than 99% recall
 
-**Code:** https://github.com/ritunjaym/vector-catalog-service
+**Code:** https://github.com/ritunjaym/vectorscale

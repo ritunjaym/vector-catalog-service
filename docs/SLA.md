@@ -55,8 +55,8 @@ Four Prometheus alerts are defined in [`infra/docker/alert_rules.yml`](../infra/
 | Live Prometheus metrics | `https://vector-catalog-api.politefield-8fe8e6a2.eastus.azurecontainerapps.io/metrics` |
 | Local Prometheus | `http://localhost:9090` |
 | Local Grafana dashboard | `http://localhost:3000` (admin / admin) |
-| GitHub Actions (CI) | `https://github.com/ritunjaym/vector-catalog-service/actions` |
-| Trivy security scan | `https://github.com/ritunjaym/vector-catalog-service/security` |
+| GitHub Actions (CI) | `https://github.com/ritunjaym/vectorscale/actions` |
+| Trivy security scan | `https://github.com/ritunjaym/vectorscale/security` |
 
 ---
 

@@ -43,12 +43,12 @@ echo ""
 # ── Step 2: Wait for sidecar model load ──────────────────────────────────────
 yellow "Step 2: Waiting for sidecar (sentence-transformers model load, up to 90s)..."
 for i in $(seq 1 18); do
-    if docker logs vector-catalog-sidecar 2>&1 | grep -q "gRPC server is listening"; then
+    if docker logs vectorscale-sidecar 2>&1 | grep -q "gRPC server is listening"; then
         green "  Sidecar ready (${i}×5s)"
         break
     fi
     if [ "$i" -eq 18 ]; then
-        red "  Sidecar did not start in 90s. Check: docker logs vector-catalog-sidecar"
+        red "  Sidecar did not start in 90s. Check: docker logs vectorscale-sidecar"
         exit 1
     fi
     printf "  Waiting... %ds\r" "$((i * 5))"
@@ -77,7 +77,7 @@ docker compose restart sidecar >/dev/null
 printf "  Waiting for sidecar to reload..."
 for i in $(seq 1 18); do
     sleep 5
-    if docker logs vector-catalog-sidecar 2>&1 | grep -q "nyc_taxi_2023.*loaded"; then
+    if docker logs vectorscale-sidecar 2>&1 | grep -q "nyc_taxi_2023.*loaded"; then
         echo ""
         green "  Index loaded (shard: nyc_taxi_2023)"
         break
@@ -86,7 +86,7 @@ for i in $(seq 1 18); do
     if [ "$i" -eq 18 ]; then
         echo ""
         red "  Sidecar did not reload in 90s."
-        echo "  Check: docker logs vector-catalog-sidecar"
+        echo "  Check: docker logs vectorscale-sidecar"
         exit 1
     fi
 done

@@ -3,8 +3,8 @@
 ## Development Setup
 
 ```bash
-git clone https://github.com/ritunjaym/vector-catalog-service
-cd vector-catalog-service
+git clone https://github.com/ritunjaym/vectorscale
+cd vectorscale
 ```
 
 ### .NET API

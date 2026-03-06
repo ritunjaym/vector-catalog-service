@@ -1,7 +1,7 @@
-# Vector Catalog Service
+# VectorScale
 
-[![CI Pipeline](https://github.com/ritunjaym/vector-catalog-service/actions/workflows/ci.yml/badge.svg)](https://github.com/ritunjaym/vector-catalog-service/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/ritunjaym/vector-catalog-service/branch/main/graph/badge.svg)](https://codecov.io/gh/ritunjaym/vector-catalog-service)
+[![CI Pipeline](https://github.com/ritunjaym/vectorscale/actions/workflows/ci.yml/badge.svg)](https://github.com/ritunjaym/vectorscale/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/ritunjaym/vectorscale/branch/main/graph/badge.svg)](https://codecov.io/gh/ritunjaym/vectorscale)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > **Coverage:** C# and Python tracked via Codecov. To activate the badge: visit [codecov.io](https://codecov.io), log in with GitHub, enable this repository, then re-run CI — the badge updates automatically after the first successful upload.
@@ -142,7 +142,7 @@ graph TB
 | **Distributed storage systems** | Delta Lake on ADLS Gen2, MinIO S3-compatible object storage | `spark/jobs/ingest_and_embed.py` (lines 80-95), `appsettings.json` storage config |
 | **Large-scale data processing** | PySpark batch pipeline, 100M+ record ingestion with partitioning | `spark/jobs/ingest_and_embed.py`, `docs/BENCHMARKS.md` scaling projections |
 | **High-performance services** | .NET 8 Web API: P50 152ms, P99 425ms at 500 qps | `src/VectorCatalog.Api/`, `docs/BENCHMARKS.md` latency tables |
-| **Azure-native tooling** | AKS Helm chart with HPA, managed disks, Azure Monitor integration | `helm/vector-catalog/` (11 files, 879 lines) |
+| **Azure-native tooling** | AKS Helm chart with HPA, managed disks, Azure Monitor integration | `helm/vectorscale/` (11 files, 879 lines) |
 | **Production observability** | OpenTelemetry distributed traces, Prometheus metrics, Serilog structured logs | `Infrastructure/Observability/`, correlation IDs in all requests |
 | **Resilience engineering** | Polly circuit breaker (30s break), exponential backoff retry (3 attempts) | `Infrastructure/Resilience/ResiliencePolicies.cs`, 99.99% retry success |
 | **System design** | Cache-aside pattern (85% hit rate), content-based sharding, graceful degradation | `Services/SearchService.cs` (fire-and-forget cache), `Services/ShardRouter.cs` |
@@ -224,8 +224,8 @@ Rigorous experimentation on query optimization. See [AB_TESTING.md](docs/AB_TEST
 ## 🚀 Quick Start (One Command)
 
 ```bash
-git clone https://github.com/ritunjaym/vector-catalog-service.git
-cd vector-catalog-service
+git clone https://github.com/ritunjaym/vectorscale.git
+cd vectorscale
 ./scripts/run_demo.sh
 ```
 
@@ -276,8 +276,8 @@ cd vector-catalog-service
 ### 1. Clone and Start
 
 ```bash
-git clone https://github.com/ritunjaym/vector-catalog-service.git
-cd vector-catalog-service
+git clone https://github.com/ritunjaym/vectorscale.git
+cd vectorscale
 docker compose up -d
 ```
 
@@ -498,7 +498,7 @@ docker compose up -d
 ### Kubernetes (Helm)
 
 ```bash
-helm install vector-catalog ./helm/vector-catalog \
+helm install vectorscale ./helm/vectorscale \
   --set image.tag=$(git rev-parse --short HEAD)
 ```
 
@@ -532,7 +532,7 @@ helm install vector-catalog ./helm/vector-catalog \
 
 **Stop when not demoing:**
 ```bash
-az group delete -n vector-catalog-rg --yes  # Cost: $0
+az group delete -n vectorscale-rg --yes  # Cost: $0
 ```
 
 ---
@@ -593,7 +593,7 @@ rate(redis_commands_total{command="get",status="hit"}[5m]) / rate(redis_commands
 - Network policies (sidecar internal-only)
 - WAF via Azure Front Door
 
-[Trivy Results](https://github.com/ritunjaym/vector-catalog-service/security)
+[Trivy Results](https://github.com/ritunjaym/vectorscale/security)
 
 ---
 
@@ -674,7 +674,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 **Ritunjay Murali**
 GitHub: [@ritunjaym](https://github.com/ritunjaym)
-Project: [vector-catalog-service](https://github.com/ritunjaym/vector-catalog-service)
+Project: [vectorscale](https://github.com/ritunjaym/vectorscale)
 
 Designed to demonstrate production-ready ML infrastructure for Azure Data / OneLake SE II roles.
 

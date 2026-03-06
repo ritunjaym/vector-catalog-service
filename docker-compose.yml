@@ -4,7 +4,7 @@ services:
   # ══════════════════════════════════════════════════════════════════════════
   redis:
     image: redis:7-alpine
-    container_name: vector-catalog-redis
+    container_name: vectorscale-redis
     ports:
       - "6379:6379"
     command: >
@@ -18,14 +18,14 @@ services:
       timeout: 3s
       retries: 3
     networks:
-      - vector-catalog-net
+      - vectorscale-net
 
   # ══════════════════════════════════════════════════════════════════════════
   # MinIO (S3-compatible object storage for Delta Lake and indexes)
   # ══════════════════════════════════════════════════════════════════════════
   minio:
     image: minio/minio:latest
-    container_name: vector-catalog-minio
+    container_name: vectorscale-minio
     ports:
       - "9000:9000"      # S3 API
       - "9001:9001"      # Web Console
@@ -41,12 +41,12 @@ services:
       timeout: 5s
       retries: 3
     networks:
-      - vector-catalog-net
+      - vectorscale-net
 
   # ── MinIO bucket initialization ───────────────────────────────────────────
   minio-init:
     image: minio/mc:latest
-    container_name: vector-catalog-minio-init
+    container_name: vectorscale-minio-init
     depends_on:
       minio:
         condition: service_healthy
@@ -59,7 +59,7 @@ services:
       echo 'MinIO buckets initialized successfully';
       "
     networks:
-      - vector-catalog-net
+      - vectorscale-net
 
   # ══════════════════════════════════════════════════════════════════════════
   # Python gRPC Sidecar (Embedding + FAISS Index Service)
@@ -68,7 +68,7 @@ services:
     build:
       context: ./sidecar
       dockerfile: Dockerfile
-    container_name: vector-catalog-sidecar
+    container_name: vectorscale-sidecar
     ports:
       - "50051:50051"
     environment:
@@ -85,7 +85,7 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - vector-catalog-net
+      - vectorscale-net
     deploy:
       resources:
         limits:
@@ -101,25 +101,25 @@ services:
   api:
     build:
       context: .
-      dockerfile: src/VectorCatalog.Api/Dockerfile
-    container_name: vector-catalog-api
+      dockerfile: src/VectorScale.Api/Dockerfile
+    container_name: vectorscale-api
     ports:
       - "8080:8080"      # HTTP API + Prometheus /metrics
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      VectorCatalog__SidecarGrpcAddress: http://sidecar:50051
-      VectorCatalog__Redis__ConnectionString: redis:6379
-      VectorCatalog__Redis__KeyPrefix: "vc:"
-      VectorCatalog__Redis__DefaultCacheTtlSeconds: 300
-      VectorCatalog__Faiss__DefaultTopK: 10
-      VectorCatalog__Faiss__DefaultNprobe: 10
-      VectorCatalog__Faiss__DefaultShardKey: nyc_taxi_2023
-      VectorCatalog__Storage__MinioEndpoint: http://minio:9000
-      VectorCatalog__Storage__MinioAccessKey: minioadmin
-      VectorCatalog__Storage__MinioSecretKey: minioadmin
-      VectorCatalog__RateLimit__PermitLimit: 100
-      VectorCatalog__RateLimit__WindowSeconds: 10
+      VectorScale__SidecarGrpcAddress: http://sidecar:50051
+      VectorScale__Redis__ConnectionString: redis:6379
+      VectorScale__Redis__KeyPrefix: "vc:"
+      VectorScale__Redis__DefaultCacheTtlSeconds: 300
+      VectorScale__Faiss__DefaultTopK: 10
+      VectorScale__Faiss__DefaultNprobe: 10
+      VectorScale__Faiss__DefaultShardKey: nyc_taxi_2023
+      VectorScale__Storage__MinioEndpoint: http://minio:9000
+      VectorScale__Storage__MinioAccessKey: minioadmin
+      VectorScale__Storage__MinioSecretKey: minioadmin
+      VectorScale__RateLimit__PermitLimit: 100
+      VectorScale__RateLimit__WindowSeconds: 10
     depends_on:
       redis:
         condition: service_healthy
@@ -134,7 +134,7 @@ services:
       retries: 3
       start_period: 10s
     networks:
-      - vector-catalog-net
+      - vectorscale-net
     deploy:
       resources:
         limits:
@@ -149,7 +149,7 @@ services:
   # ══════════════════════════════════════════════════════════════════════════
   jaeger:
     image: jaegertracing/all-in-one:1.52
-    container_name: vector-catalog-jaeger
+    container_name: vectorscale-jaeger
     ports:
       - "6831:6831/udp"  # Jaeger compact thrift (legacy)
       - "16686:16686"    # Jaeger UI
@@ -157,14 +157,14 @@ services:
     environment:
       COLLECTOR_OTLP_ENABLED: true
     networks:
-      - vector-catalog-net
+      - vectorscale-net
 
   # ══════════════════════════════════════════════════════════════════════════
   # Prometheus (Metrics aggregation and alerting)
   # ══════════════════════════════════════════════════════════════════════════
   prometheus:
     image: prom/prometheus:v2.48.1
-    container_name: vector-catalog-prometheus
+    container_name: vectorscale-prometheus
     ports:
       - "9090:9090"
     volumes:
@@ -176,14 +176,14 @@ services:
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
     networks:
-      - vector-catalog-net
+      - vectorscale-net
 
   # ══════════════════════════════════════════════════════════════════════════
   # Grafana (Metrics visualization)
   # ══════════════════════════════════════════════════════════════════════════
   grafana:
     image: grafana/grafana:10.2.3
-    container_name: vector-catalog-grafana
+    container_name: vectorscale-grafana
     ports:
       - "3000:3000"
     environment:
@@ -195,12 +195,12 @@ services:
       - ./infra/grafana/dashboards:/var/lib/grafana/dashboards
       - grafana-data:/var/lib/grafana
     networks:
-      - vector-catalog-net
+      - vectorscale-net
     depends_on:
       - prometheus
 
 networks:
-  vector-catalog-net:
+  vectorscale-net:
     driver: bridge
 
 volumes:
