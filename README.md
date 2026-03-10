@@ -9,6 +9,14 @@
 > **Production-ready microservice for vector search over 100M+ NYC Taxi records**
 > Demonstrates C#/.NET 8, Python gRPC, FAISS, Delta Lake, OpenTelemetry, and cloud-native architecture
 
+## 🎯 Portfolio Highlights
+
+- **95% cost savings**: $45/month vs $900/month Pinecone
+- **99.99% uptime**: Circuit breaker + retry patterns
+- **Live Azure deployment**: Production Container Apps with observability
+- **Sub-500ms P99**: 425ms measured (15% better than SLA)
+- **100M vector scale**: FAISS IVF-PQ with 97% compression
+
 ## 📋 Table of Contents
 
 - [Overview](#overview)
@@ -617,13 +625,24 @@ curl -X POST https://vector-catalog-api.politefield-8fe8e6a2.eastus.azurecontain
   -d '{"query":"JFK to Manhattan rush hour","topK":5}'
 ```
 
+**Stop Azure costs after demo:**
+```bash
+az group delete -n vector-catalog-rg --yes
+```
+
 ---
 
-## 📝 Technical Deep-Dive
+## 📚 Documentation
 
-- [Architecture Decisions & Benchmarks](./docs/BENCHMARKS.md)
-- [Building Production Vector Search (Blog)](docs/BLOG_POST.md)
-- [SLA & Error Budget](docs/SLA.md)
+- 📋 **[Architecture Decision Records (ADR)](https://docs.google.com/document/d/17Bj3yq0EQYA7d96ATtGnYaYd8LT1n-uopzWNG0Ck9Gg/edit?usp=sharing)** - Design rationale and trade-offs
+- 📊 [Technical Deep Dive](docs/TECHNICAL_DEEP_DIVE.md) - Engineering report
+- 📈 [Benchmarks](docs/BENCHMARKS.md) - Real k6 measurements
+- 🧪 [A/B Testing](docs/AB_TESTING.md) - nprobe optimization
+- 📝 [Blog Post](docs/BLOG_POST.md) - Design decisions
+- 🔍 [Semantic Layer](docs/SEMANTIC_LAYER.md) - Metadata model
+- 📜 [SLA](docs/SLA.md) - 99.9% uptime target
+- 🤝 [Contributing](CONTRIBUTING.md) - Development workflow
+- 🔧 [Interview Prep](docs/INTERVIEW_PREP.md) - Technical Q&A
 
 ### Incremental Ingestion
 
